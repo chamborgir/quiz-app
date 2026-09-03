@@ -343,8 +343,20 @@ body {
   border: 1px solid var(--border);
 }
 
-.flashcard-front { background: var(--surface); color: var(--text); }
-.flashcard-back { background: var(--text); color: var(--bg); transform: rotateY(180deg); }
+.flashcard-front { 
+  background: #ffffff; 
+  color: #000000; 
+}
+
+.flashcard-back { 
+  background: #22c55e; 
+  color: #000; 
+  transform: rotateY(180deg); 
+  
+
+}
+
+
 .nav-row {
   display: flex;
   justify-content: space-between;
