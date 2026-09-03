@@ -1,0 +1,11 @@
+{
+  "functions": {
+    "api/generate.js": { "maxDuration": 60 }
+  },
+  "rewrites": [
+    { "source": "/library", "destination": "/index.html" },
+    { "source": "/play", "destination": "/index.html" },
+    { "source": "/auth", "destination": "/index.html" },
+    { "source": "/shared/:code", "destination": "/index.html" }
+  ]
+}
