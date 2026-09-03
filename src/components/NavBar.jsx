@@ -15,10 +15,11 @@ export default function NavBar() {
     return (
         <header className="navbar">
             <Link to="/" className="brand">
-                QuizCraft
+                QuizLEPT
             </Link>
             <nav className="nav-links">
                 {user && <Link to="/library">Library</Link>}
+                {user && <Link to="/create">Create</Link>}
                 <button
                     className="theme-toggle"
                     onClick={toggleTheme}

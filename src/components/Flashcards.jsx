@@ -3,22 +3,30 @@ import { useState } from "react";
 export default function Flashcards({ questions, onFinish }) {
     const [index, setIndex] = useState(0);
     const [flipped, setFlipped] = useState(false);
+    const [transitioning, setTransitioning] = useState(false);
 
     const current = questions[index];
     const isLast = index === questions.length - 1;
 
+    function goTo(action) {
+        if (transitioning) return;
+        setTransitioning(true);
+        setFlipped(false); // always flip back to front before switching content
+        setTimeout(() => {
+            action();
+            setTransitioning(false);
+        }, 500); // matches the CSS flip duration — hides the next card's answer until fully reset
+    }
+
     function next() {
-        setFlipped(false);
-        if (isLast) {
-            onFinish();
-        } else {
-            setIndex((i) => i + 1);
-        }
+        goTo(() => {
+            if (isLast) onFinish();
+            else setIndex((i) => i + 1);
+        });
     }
 
     function prev() {
-        setFlipped(false);
-        setIndex((i) => Math.max(0, i - 1));
+        goTo(() => setIndex((i) => Math.max(0, i - 1)));
     }
 
     return (
@@ -28,8 +36,8 @@ export default function Flashcards({ questions, onFinish }) {
             </div>
 
             <div
-                className={`flashcard-wrap ${flipped ? "flipped" : ""}`}
-                onClick={() => setFlipped((f) => !f)}
+                className={`flashcard-wrap ${flipped ? "flipped" : ""} ${transitioning ? "transitioning" : ""}`}
+                onClick={() => !transitioning && setFlipped((f) => !f)}
             >
                 <div className="flashcard-inner">
                     <div className="flashcard-face flashcard-front">
@@ -47,12 +55,12 @@ export default function Flashcards({ questions, onFinish }) {
                 <button
                     className="btn btn-secondary"
                     onClick={prev}
-                    disabled={index === 0}
+                    disabled={index === 0 || transitioning}
                 >
-                    ← Prev
+                    Prev
                 </button>
-                <button className="btn" onClick={next}>
-                    {isLast ? "Finish" : "Next →"}
+                <button className="btn" onClick={next} disabled={transitioning}>
+                    {isLast ? "Finish" : "Next"}
                 </button>
             </div>
         </div>

@@ -1,7 +1,8 @@
-const MODEL = "gemini-3.6-flash";
-const BATCH_SIZE = 25;
-const MAX_SOURCE_CHARS = 30000;
-const MAX_CONCURRENT = 2; // keep this low — higher values can crash local dev servers
+const MODEL = "gemini-3.5-flash-lite";
+const BATCH_SIZE = 50; // 50/100/150 all divide evenly into full-size batches
+const MAX_CONCURRENT = 3; // enough to cover 150 items (3 batches) in a single round
+const MAX_SOURCE_CHARS = 60000; // gemini-3.5-flash-lite has a 1M-token context, this is a cost/speed guard, not a hard limit
+const MAX_OUTPUT_TOKENS = 16000; // generous for a 50-item batch with explanations, well under the 65,536 cap
 
 export default async function handler(req, res) {
     if (req.method !== "POST") {
@@ -43,16 +44,18 @@ export default async function handler(req, res) {
         const allQuestions = [];
         const errors = [];
 
-        // Process batches with limited concurrency instead of all-at-once
         for (let i = 0; i < batchSizes.length; i += MAX_CONCURRENT) {
             const chunk = batchSizes.slice(i, i + MAX_CONCURRENT);
             const chunkPromises = chunk.map((size, j) => {
                 const batchIndex = i + j;
-                return callGemini(
+                return callGeminiWithRetry(
                     apiKey,
                     buildPrompt(mode, size, sourceText, batchIndex),
                 ).catch((err) => {
-                    console.error(`Batch ${batchIndex} failed:`, err.message);
+                    console.error(
+                        `Batch ${batchIndex} failed permanently:`,
+                        err.message,
+                    );
                     errors.push(err.message);
                     return [];
                 });
@@ -122,6 +125,17 @@ SOURCE MATERIAL:
 """${sourceText}"""`;
 }
 
+async function callGeminiWithRetry(apiKey, prompt, retries = 1) {
+    try {
+        return await callGemini(apiKey, prompt);
+    } catch (err) {
+        if (retries <= 0) throw err;
+        console.warn("Batch failed, retrying once:", err.message);
+        await new Promise((r) => setTimeout(r, 800));
+        return callGeminiWithRetry(apiKey, prompt, retries - 1);
+    }
+}
+
 async function callGemini(apiKey, prompt) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
 
@@ -131,8 +145,7 @@ async function callGemini(apiKey, prompt) {
         body: JSON.stringify({
             contents: [{ parts: [{ text: prompt }] }],
             generationConfig: {
-                temperature: 0.7,
-                maxOutputTokens: 8192,
+                maxOutputTokens: MAX_OUTPUT_TOKENS,
                 responseMimeType: "application/json",
             },
         }),

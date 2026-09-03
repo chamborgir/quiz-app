@@ -7,6 +7,7 @@ import Home from "./pages/Home.jsx";
 import QuizRunnerPage from "./pages/QuizRunnerPage.jsx";
 import Library from "./pages/Library.jsx";
 import SharedQuiz from "./pages/SharedQuiz.jsx";
+import CreateQuiz from "./pages/CreateQuiz.jsx";
 
 export default function App() {
     const [activeQuiz, setActiveQuiz] = useState(null);
@@ -34,6 +35,14 @@ export default function App() {
                     element={
                         <ProtectedRoute>
                             <Library setActiveQuiz={setActiveQuiz} />
+                        </ProtectedRoute>
+                    }
+                />
+                <Route
+                    path="/create"
+                    element={
+                        <ProtectedRoute>
+                            <CreateQuiz />
                         </ProtectedRoute>
                     }
                 />

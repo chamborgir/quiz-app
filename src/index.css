@@ -368,7 +368,10 @@ body {
   
 
 }
-
+.flashcard-wrap.transitioning .flashcard-inner {
+  opacity: 0.4;
+  transition: transform 0.5s, opacity 0.3s;
+}
 
 .nav-row {
   display: flex;
@@ -583,6 +586,108 @@ body {
   border-radius: 10px;
   margin-bottom: 1rem;
   font-size: 0.9rem;
+}
+
+
+
+
+/* Centered button rows */
+.nav-row {
+  justify-content: center;
+}
+
+.option-row.centered {
+  justify-content: center;
+}
+
+.nav-row.centered {
+  justify-content: center;
+}
+
+/* Quiz top row (progress + timer) */
+.quiz-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.quiz-top-row .progress { margin-bottom: 0; }
+
+.timer-badge {
+  font-weight: 700;
+  font-size: 0.85rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 8px;
+  background: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.timer-badge.timer-low {
+  color: var(--error);
+  border-color: var(--error);
+}
+
+.custom-timer-input {
+  margin-top: 0.6rem;
+  width: 140px;
+  padding: 0.6rem 0.8rem;
+  border-radius: 9px;
+  border: 1px solid var(--border);
+  background: var(--bg);
+  color: var(--text);
+  font-size: 0.9rem;
+}
+
+/* Immediate-feedback choice states */
+.choice.correct-reveal {
+  border-color: var(--success);
+  background: var(--success-bg);
+  font-weight: 600;
+}
+
+.choice.incorrect-reveal {
+  border-color: var(--error);
+  background: var(--error-bg);
+  font-weight: 600;
+}
+
+.choice:disabled {
+  cursor: default;
+}
+
+.explanation-box {
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.9rem 1rem;
+  margin: 0.75rem 0 1rem;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+/* Create page */
+.create-item { margin-bottom: 1rem; }
+
+.create-item-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.choice-field label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+}
+
+.choice-field input[type='radio'] {
+  width: auto;
+  margin: 0;
 }
 
 /* Mobile tightening */

@@ -114,7 +114,8 @@ export default function Library({ setActiveQuiz }) {
             <h2>My Library</h2>
             {quizzes.length === 0 && (
                 <p className="muted">
-                    No saved quizzes yet. Generate one from the home page.
+                    No saved quizzes yet. Generate one from the home page, or
+                    create your own.
                 </p>
             )}
 
@@ -151,7 +152,7 @@ export default function Library({ setActiveQuiz }) {
                             className="btn btn-sm"
                             onClick={() => startPlay(quiz)}
                         >
-                            Play
+                            Take Quiz
                         </button>
                         {editingId === quiz.id ? (
                             <button
