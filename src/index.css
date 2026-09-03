@@ -96,6 +96,19 @@ body {
   display: none;
 }
 
+/* Fix for Sign In button styling across light/dark modes and hover */
+.navbar .btn {
+  background: var(--text);
+  color: var(--bg);
+  border: 1px solid var(--border);
+}
+
+.navbar .btn:hover {
+  background: var(--accent);
+  color: var(--accent-contrast);
+  opacity: 1; /* Prevents text from disappearing on hover */
+}
+
 .theme-toggle {
   background: none;
   border: 1px solid var(--border);
