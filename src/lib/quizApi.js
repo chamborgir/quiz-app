@@ -171,3 +171,25 @@ export async function updateQuizContent(
         .eq("id", quizId);
     if (error) throw error;
 }
+
+export async function updateSingleQuestion(
+    quizId,
+    mode,
+    matchKey,
+    updatedItem,
+) {
+    const quiz = await getQuizById(quizId);
+    const questions = [...quiz.questions];
+    const idx = questions.findIndex(
+        (q) => (mode === "mcq" ? q.question : q.front) === matchKey,
+    );
+    if (idx === -1)
+        throw new Error("Could not locate this question in the saved quiz.");
+    questions[idx] = updatedItem;
+    await updateQuizContent(quizId, {
+        title: quiz.title,
+        mode: quiz.mode,
+        questions,
+        count: questions.length,
+    });
+}

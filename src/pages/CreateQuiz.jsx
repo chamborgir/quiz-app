@@ -2,9 +2,10 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { saveQuiz } from "../lib/quizApi.js";
+import { uploadQuizImage } from "../lib/imageApi.js";
 
 function emptyFlashcard() {
-    return { front: "", back: "" };
+    return { front: "", back: "", imageUrl: "" };
 }
 
 function emptyMcq() {
@@ -13,6 +14,7 @@ function emptyMcq() {
         choices: ["", "", "", ""],
         correctIndex: 0,
         explanation: "",
+        imageUrl: "",
     };
 }
 
@@ -24,6 +26,7 @@ export default function CreateQuiz() {
     const [items, setItems] = useState([emptyFlashcard()]);
     const [error, setError] = useState("");
     const [saving, setSaving] = useState(false);
+    const [uploadingIdx, setUploadingIdx] = useState(null);
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
     const [pendingLeaveAction, setPendingLeaveAction] = useState(null);
     const [justSaved, setJustSaved] = useState(false);
@@ -33,31 +36,29 @@ export default function CreateQuiz() {
         (title.trim() !== "" ||
             items.some((it) =>
                 mode === "flashcard"
-                    ? it.front.trim() !== "" || it.back.trim() !== ""
+                    ? it.front.trim() !== "" ||
+                      it.back.trim() !== "" ||
+                      it.imageUrl
                     : it.question.trim() !== "" ||
                       it.choices.some((c) => c.trim() !== "") ||
-                      it.explanation.trim() !== "",
+                      it.explanation.trim() !== "" ||
+                      it.imageUrl,
             ));
 
-    // Browser-level guard: back button, refresh, tab close
     useEffect(() => {
         if (!hasUnsavedInput) return;
-
         function handleBeforeUnload(e) {
             e.preventDefault();
             e.returnValue = "";
         }
-
         function handlePopState() {
             window.history.pushState(null, "", window.location.href);
             setPendingLeaveAction(() => () => navigate("/"));
             setShowLeaveWarning(true);
         }
-
         window.history.pushState(null, "", window.location.href);
         window.addEventListener("beforeunload", handleBeforeUnload);
         window.addEventListener("popstate", handlePopState);
-
         return () => {
             window.removeEventListener("beforeunload", handleBeforeUnload);
             window.removeEventListener("popstate", handlePopState);
@@ -125,6 +126,34 @@ export default function CreateQuiz() {
         );
     }
 
+    async function handleImageUpload(idx, file) {
+        if (!file) return;
+        if (!file.type.startsWith("image/")) {
+            setError("Please upload an image file.");
+            return;
+        }
+        setUploadingIdx(idx);
+        setError("");
+        try {
+            const url = await uploadQuizImage(user.id, file);
+            setItems((prev) =>
+                prev.map((it, i) =>
+                    i === idx ? { ...it, imageUrl: url } : it,
+                ),
+            );
+        } catch (err) {
+            setError("Image upload failed: " + err.message);
+        } finally {
+            setUploadingIdx(null);
+        }
+    }
+
+    function removeImage(idx) {
+        setItems((prev) =>
+            prev.map((it, i) => (i === idx ? { ...it, imageUrl: "" } : it)),
+        );
+    }
+
     function validate() {
         if (!title.trim()) return "Please give your quiz a title.";
         if (items.length === 0) return "Add at least one item.";
@@ -164,7 +193,7 @@ export default function CreateQuiz() {
                 questions: items,
                 count: items.length,
             });
-            setJustSaved(true); // allow navigation without the warning firing
+            setJustSaved(true);
             navigate("/library");
         } catch (err) {
             setError("Failed to save: " + err.message);
@@ -219,6 +248,36 @@ export default function CreateQuiz() {
                             >
                                 Remove
                             </button>
+                        )}
+                    </div>
+
+                    <div className="field">
+                        <label>Image (optional)</label>
+                        {item.imageUrl ? (
+                            <div className="item-image-preview">
+                                <img
+                                    src={item.imageUrl}
+                                    alt="Question visual"
+                                />
+                                <button
+                                    className="btn-text danger"
+                                    onClick={() => removeImage(idx)}
+                                >
+                                    Remove image
+                                </button>
+                            </div>
+                        ) : (
+                            <input
+                                type="file"
+                                accept="image/*"
+                                onChange={(e) =>
+                                    handleImageUpload(idx, e.target.files[0])
+                                }
+                                disabled={uploadingIdx === idx}
+                            />
+                        )}
+                        {uploadingIdx === idx && (
+                            <p className="muted small">Uploading…</p>
                         )}
                     </div>
 
@@ -354,8 +413,8 @@ export default function CreateQuiz() {
                             className="muted"
                             style={{ marginBottom: "1.25rem" }}
                         >
-                            All unsaved changes will not be saved and you can't
-                            continue it later.
+                            Your current progress will not be saved and you
+                            can't continue it later.
                         </p>
                         <div className="nav-row centered">
                             <button

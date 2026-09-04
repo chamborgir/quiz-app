@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { formatQuestionText } from "../utils/formatText.js";
+import FormattedText from "./FormattedText.jsx";
 
 export default function MultipleChoice({
     questions,
@@ -121,7 +123,12 @@ export default function MultipleChoice({
                 )}
             </div>
 
-            <div className="question-text">{current.question}</div>
+            {current.imageUrl && (
+                <img src={current.imageUrl} alt="" className="quiz-image" />
+            )}
+            <div className="question-text">
+                <FormattedText text={current.question} />
+            </div>
 
             {current.choices.map((choice, i) => {
                 let cls = "choice";
@@ -137,7 +144,8 @@ export default function MultipleChoice({
                         onClick={() => selectChoice(i)}
                         disabled={isRevealed}
                     >
-                        {String.fromCharCode(65 + i)}. {choice}
+                        {String.fromCharCode(65 + i)}.{" "}
+                        <FormattedText text={choice} />
                     </button>
                 );
             })}
@@ -149,7 +157,7 @@ export default function MultipleChoice({
                             ? "Correct!"
                             : "Incorrect."}
                     </strong>{" "}
-                    {current.explanation}
+                    <FormattedText text={current.explanation} />
                 </div>
             )}
 

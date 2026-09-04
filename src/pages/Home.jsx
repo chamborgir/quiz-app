@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { saveQuiz } from "../lib/quizApi.js";
@@ -12,6 +12,41 @@ export default function Home({ setActiveQuiz }) {
     const [pdfText, setPdfText] = useState("");
     const [fileName, setFileName] = useState("");
     const [error, setError] = useState("");
+    const [progress, setProgress] = useState(0);
+
+    const intervalRef = useRef(null);
+    const startTimeRef = useRef(null);
+    const estimatedMsRef = useRef(10000);
+
+    function estimateDuration(mode, count) {
+        if (mode === "flashcard") return 8000 + count * 250;
+        // mcq: batches + verification pass, both scale with count
+        return 12000 + (count / 50) * 16000;
+    }
+
+    function startProgress(mode, count) {
+        estimatedMsRef.current = estimateDuration(mode, count);
+        startTimeRef.current = Date.now();
+        setProgress(0);
+        intervalRef.current = setInterval(() => {
+            const elapsed = Date.now() - startTimeRef.current;
+            const pct = 95 * (1 - Math.exp(-elapsed / estimatedMsRef.current));
+            setProgress(pct);
+        }, 150);
+    }
+
+    function stopProgress(finalValue) {
+        if (intervalRef.current) clearInterval(intervalRef.current);
+        intervalRef.current = null;
+        setProgress(finalValue);
+    }
+
+    useEffect(
+        () => () => {
+            if (intervalRef.current) clearInterval(intervalRef.current);
+        },
+        [],
+    );
 
     function handleExtracted(text, name) {
         setPdfText(text);
@@ -20,14 +55,20 @@ export default function Home({ setActiveQuiz }) {
         setError("");
     }
 
-    async function handleGenerate(mode, count, title) {
+    async function handleGenerate(mode, count, title, sourceMode) {
         setStep("loading");
         setError("");
+        startProgress(mode, count);
         try {
             const res = await fetch("/api/generate", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: pdfText, mode, count }),
+                body: JSON.stringify({
+                    text: pdfText,
+                    mode,
+                    count,
+                    sourceMode,
+                }),
             });
 
             const rawBody = await res.text();
@@ -46,6 +87,8 @@ export default function Home({ setActiveQuiz }) {
                 );
             if (!data.questions || data.questions.length === 0)
                 throw new Error("No questions were generated.");
+
+            stopProgress(100);
 
             let quizId = null;
             if (user) {
@@ -73,6 +116,7 @@ export default function Home({ setActiveQuiz }) {
             navigate("/play");
         } catch (err) {
             console.error(err);
+            stopProgress(0);
             setError(
                 err.message || "Something went wrong generating your quiz.",
             );
@@ -85,8 +129,8 @@ export default function Home({ setActiveQuiz }) {
             <div className="hero">
                 <h1>Turn any PDF into flashcards or a quiz</h1>
                 <p className="muted">
-                    Upload your notes, chapter, or article and generate a study
-                    set in seconds.
+                    Upload notes, a chapter, or an article — get a study set in
+                    seconds.
                 </p>
             </div>
 
@@ -135,10 +179,20 @@ export default function Home({ setActiveQuiz }) {
 
             {step === "loading" && (
                 <div className="card center-content">
-                    <div className="spinner"></div>
-                    <p>Generating your quiz…</p>
+                    <p style={{ marginBottom: "0.25rem", fontWeight: 600 }}>
+                        Generating your quiz…
+                    </p>
+                    <div className="progress-bar-track">
+                        <div
+                            className="progress-bar-fill"
+                            style={{ width: `${progress}%` }}
+                        />
+                    </div>
+                    <p className="muted small" style={{ marginTop: "0.6rem" }}>
+                        {Math.round(progress)}%
+                    </p>
                     <p className="muted small">
-                        This can take up to a minute for larger sets.
+                        Larger sets take longer — this can run up to a minute.
                     </p>
                 </div>
             )}

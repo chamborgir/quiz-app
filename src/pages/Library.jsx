@@ -423,6 +423,16 @@ export default function Library({ setActiveQuiz }) {
                                         {openMenuId === quiz.id && (
                                             <div className="quiz-menu">
                                                 <button
+                                                    className="btn-text"
+                                                    onClick={() =>
+                                                        openGroupModal(quiz)
+                                                    }
+                                                >
+                                                    {quiz.collection_id
+                                                        ? "Change Group"
+                                                        : "Add to Group"}
+                                                </button>
+                                                <button
                                                     onClick={() => {
                                                         setOpenMenuId(null);
                                                         navigate(
@@ -501,14 +511,6 @@ export default function Library({ setActiveQuiz }) {
                                             : "History"}
                                     </button>
                                 )}
-                                <button
-                                    className="btn-text"
-                                    onClick={() => openGroupModal(quiz)}
-                                >
-                                    {quiz.collection_id
-                                        ? "Change Group"
-                                        : "Add to Group"}
-                                </button>
                             </div>
 
                             {shareLinks[quiz.id] && (

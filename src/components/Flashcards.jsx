@@ -1,4 +1,5 @@
 import { useState } from "react";
+import FormattedText from "./FormattedText.jsx";
 
 export default function Flashcards({ questions, onFinish }) {
     const [index, setIndex] = useState(0);
@@ -41,10 +42,17 @@ export default function Flashcards({ questions, onFinish }) {
             >
                 <div className="flashcard-inner">
                     <div className="flashcard-face flashcard-front">
-                        {current.front}
+                        {current.imageUrl && (
+                            <img
+                                src={current.imageUrl}
+                                alt=""
+                                className="quiz-image"
+                            />
+                        )}
+                        <FormattedText text={current.front} />
                     </div>
                     <div className="flashcard-face flashcard-back">
-                        {current.back}
+                        <FormattedText text={current.back} />
                     </div>
                 </div>
             </div>

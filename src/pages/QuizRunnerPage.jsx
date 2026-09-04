@@ -9,15 +9,19 @@ import Summary from "../components/Summary.jsx";
 
 const TIMER_PRESETS = [
     { label: "No timer", minutes: null },
-    { label: "10 min", minutes: 10 },
-    { label: "20 min", minutes: 20 },
-    { label: "30 min", minutes: 30 },
+    { label: "15 mins", minutes: 15 },
+    { label: "30 mins", minutes: 30 },
+    { label: "60 mins", minutes: 60 },
 ];
+
+const PASS_PRESETS = [60, 75, 80];
 
 function McqOptions({ onStart }) {
     const [feedbackMode, setFeedbackMode] = useState("end");
     const [timerChoice, setTimerChoice] = useState("No timer");
     const [customMinutes, setCustomMinutes] = useState("");
+    const [passRate, setPassRate] = useState(75);
+    const [passRateMode, setPassRateMode] = useState("preset");
 
     function resolveMinutes() {
         if (timerChoice === "Custom") return Number(customMinutes) || null;
@@ -78,10 +82,51 @@ function McqOptions({ onStart }) {
                 )}
             </div>
 
+            <div className="option-group">
+                <label>Passing Score</label>
+                <div className="option-row centered">
+                    {PASS_PRESETS.map((p) => (
+                        <button
+                            key={p}
+                            className={`option-btn ${passRateMode === "preset" && passRate === p ? "active" : ""}`}
+                            onClick={() => {
+                                setPassRateMode("preset");
+                                setPassRate(p);
+                            }}
+                        >
+                            {p}%
+                        </button>
+                    ))}
+                    <button
+                        className={`option-btn ${passRateMode === "slider" ? "active" : ""}`}
+                        onClick={() => setPassRateMode("slider")}
+                    >
+                        Custom
+                    </button>
+                </div>
+                {passRateMode === "slider" && (
+                    <div className="pass-slider-row">
+                        <input
+                            type="range"
+                            min="50"
+                            max="100"
+                            value={passRate}
+                            onChange={(e) =>
+                                setPassRate(Number(e.target.value))
+                            }
+                            className="pass-slider"
+                        />
+                        <span className="pass-slider-value">{passRate}%</span>
+                    </div>
+                )}
+            </div>
+
             <div className="nav-row centered">
                 <button
                     className="btn"
-                    onClick={() => onStart(feedbackMode, resolveMinutes())}
+                    onClick={() =>
+                        onStart(feedbackMode, resolveMinutes(), passRate)
+                    }
                 >
                     Start Quiz
                 </button>
@@ -98,10 +143,11 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
     );
     const [feedbackMode, setFeedbackMode] = useState("end");
     const [timeLimitMinutes, setTimeLimitMinutes] = useState(null);
+    const [passThreshold, setPassThreshold] = useState(75);
     const [answers, setAnswers] = useState({});
     const [runKey, setRunKey] = useState(0);
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
-    const [pendingLeaveAction, setPendingLeaveAction] = useState(null); // function to run if confirmed
+    const [pendingLeaveAction, setPendingLeaveAction] = useState(null);
 
     const questions = useMemo(() => {
         if (!activeQuiz) return [];
@@ -109,9 +155,8 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeQuiz, runKey]);
 
-    const isInProgress = phase === "quiz"; // don't guard the options screen or the summary screen
+    const isInProgress = phase === "quiz";
 
-    // Browser-level guard: back button, refresh, tab close
     useEffect(() => {
         if (!isInProgress) return;
 
@@ -121,8 +166,6 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
         }
 
         function handlePopState() {
-            // Push a dummy state back so the URL doesn't actually change yet,
-            // then show our own confirmation instead of letting the browser navigate silently.
             window.history.pushState(null, "", window.location.href);
             setPendingLeaveAction(() => () => {
                 setActiveQuiz(null);
@@ -148,9 +191,10 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
 
     const { mode, quizId, title, recordAttempts } = activeQuiz;
 
-    function handleStartOptions(fbMode, minutes) {
+    function handleStartOptions(fbMode, minutes, passRate) {
         setFeedbackMode(fbMode);
         setTimeLimitMinutes(minutes);
+        setPassThreshold(passRate);
         setPhase("quiz");
     }
 
@@ -248,6 +292,7 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
                     answers={answers}
                     quizId={quizId}
                     title={title}
+                    passThreshold={passThreshold}
                     onSaved={handleSaved}
                     onRetake={handleRetake}
                     onRestart={handleRestart}
@@ -303,7 +348,7 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
                                 onClick={cancelLeave}
                             >
                                 Stay on Quiz
-                            </button>
+                            </button> 
                             <button className="btn" onClick={confirmLeave}>
                                 Leave Anyway
                             </button>
