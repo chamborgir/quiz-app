@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { saveAttempt } from "../lib/quizApi.js";
@@ -100,12 +100,46 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
     const [timeLimitMinutes, setTimeLimitMinutes] = useState(null);
     const [answers, setAnswers] = useState({});
     const [runKey, setRunKey] = useState(0);
+    const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+    const [pendingLeaveAction, setPendingLeaveAction] = useState(null); // function to run if confirmed
 
     const questions = useMemo(() => {
         if (!activeQuiz) return [];
         return shuffleQuizQuestions(activeQuiz.questions, activeQuiz.mode);
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [activeQuiz, runKey]);
+
+    const isInProgress = phase === "quiz"; // don't guard the options screen or the summary screen
+
+    // Browser-level guard: back button, refresh, tab close
+    useEffect(() => {
+        if (!isInProgress) return;
+
+        function handleBeforeUnload(e) {
+            e.preventDefault();
+            e.returnValue = "";
+        }
+
+        function handlePopState() {
+            // Push a dummy state back so the URL doesn't actually change yet,
+            // then show our own confirmation instead of letting the browser navigate silently.
+            window.history.pushState(null, "", window.location.href);
+            setPendingLeaveAction(() => () => {
+                setActiveQuiz(null);
+                navigate("/");
+            });
+            setShowLeaveWarning(true);
+        }
+
+        window.history.pushState(null, "", window.location.href);
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        window.addEventListener("popstate", handlePopState);
+
+        return () => {
+            window.removeEventListener("beforeunload", handleBeforeUnload);
+            window.removeEventListener("popstate", handlePopState);
+        };
+    }, [isInProgress, navigate, setActiveQuiz]);
 
     if (!activeQuiz) {
         navigate("/");
@@ -158,9 +192,31 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
         setPhase(mode === "mcq" ? "options" : "quiz");
     }
 
+    function requestExit(action) {
+        if (isInProgress) {
+            setPendingLeaveAction(() => action);
+            setShowLeaveWarning(true);
+        } else {
+            action();
+        }
+    }
+
     function handleRestart() {
-        setActiveQuiz(null);
-        navigate("/");
+        requestExit(() => {
+            setActiveQuiz(null);
+            navigate("/");
+        });
+    }
+
+    function confirmLeave() {
+        setShowLeaveWarning(false);
+        if (pendingLeaveAction) pendingLeaveAction();
+        setPendingLeaveAction(null);
+    }
+
+    function cancelLeave() {
+        setShowLeaveWarning(false);
+        setPendingLeaveAction(null);
     }
 
     return (
@@ -196,6 +252,64 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
                     onRetake={handleRetake}
                     onRestart={handleRestart}
                 />
+            )}
+
+            {phase === "quiz" && (
+                <div
+                    className="nav-row centered"
+                    style={{ marginTop: "0.75rem" }}
+                >
+                    <button
+                        className="btn-text danger"
+                        onClick={() =>
+                            requestExit(() => {
+                                setActiveQuiz(null);
+                                navigate("/");
+                            })
+                        }
+                    >
+                        Cancel Quiz
+                    </button>
+                </div>
+            )}
+
+            {showLeaveWarning && (
+                <div className="modal-overlay" onClick={cancelLeave}>
+                    <div
+                        className="modal-card result-modal"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            className="modal-close"
+                            onClick={cancelLeave}
+                            aria-label="Close"
+                        >
+                            ×
+                        </button>
+                        <div className="result-emoji">⚠️</div>
+                        <p className="warning-title">
+                            Are you sure you want to go back?
+                        </p>
+                        <p
+                            className="muted"
+                            style={{ marginBottom: "1.25rem" }}
+                        >
+                            Your current attempt will not be saved and you can't
+                            continue it later.
+                        </p>
+                        <div className="nav-row centered">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={cancelLeave}
+                            >
+                                Stay on Quiz
+                            </button>
+                            <button className="btn" onClick={confirmLeave}>
+                                Leave Anyway
+                            </button>
+                        </div>
+                    </div>
+                </div>
             )}
         </div>
     );

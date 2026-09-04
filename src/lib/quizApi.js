@@ -144,3 +144,30 @@ export async function deleteCollection(collectionId) {
         .eq("id", collectionId);
     if (error) throw error;
 }
+
+export async function getQuizById(quizId) {
+    const { data, error } = await supabase
+        .from("quizzes")
+        .select("*")
+        .eq("id", quizId)
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function updateQuizContent(
+    quizId,
+    { title, mode, questions, count },
+) {
+    const { error } = await supabase
+        .from("quizzes")
+        .update({
+            title,
+            mode,
+            questions,
+            count,
+            updated_at: new Date().toISOString(),
+        })
+        .eq("id", quizId);
+    if (error) throw error;
+}

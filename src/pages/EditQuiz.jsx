@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import { saveQuiz } from "../lib/quizApi.js";
+import { getQuizById, updateQuizContent } from "../lib/quizApi.js";
 
 function emptyFlashcard() {
     return { front: "", back: "" };
@@ -16,32 +16,77 @@ function emptyMcq() {
     };
 }
 
-export default function CreateQuiz() {
+function normalizeItem(mode, item) {
+    if (mode === "flashcard") {
+        return { front: item.front || "", back: item.back || "" };
+    }
+    return {
+        question: item.question || "",
+        choices:
+            Array.isArray(item.choices) && item.choices.length === 4
+                ? item.choices
+                : ["", "", "", ""],
+        correctIndex:
+            typeof item.correctIndex === "number" ? item.correctIndex : 0,
+        explanation: item.explanation || "",
+    };
+}
+
+export default function EditQuiz() {
+    const { quizId } = useParams();
     const { user } = useAuth();
     const navigate = useNavigate();
+
+    const [loading, setLoading] = useState(true);
+    const [notFound, setNotFound] = useState(false);
     const [mode, setMode] = useState("flashcard");
     const [title, setTitle] = useState("");
-    const [items, setItems] = useState([emptyFlashcard()]);
+    const [items, setItems] = useState([]);
+    const [originalSnapshot, setOriginalSnapshot] = useState("");
     const [error, setError] = useState("");
     const [saving, setSaving] = useState(false);
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
     const [pendingLeaveAction, setPendingLeaveAction] = useState(null);
     const [justSaved, setJustSaved] = useState(false);
 
-    const hasUnsavedInput =
-        !justSaved &&
-        (title.trim() !== "" ||
-            items.some((it) =>
-                mode === "flashcard"
-                    ? it.front.trim() !== "" || it.back.trim() !== ""
-                    : it.question.trim() !== "" ||
-                      it.choices.some((c) => c.trim() !== "") ||
-                      it.explanation.trim() !== "",
-            ));
-
-    // Browser-level guard: back button, refresh, tab close
     useEffect(() => {
-        if (!hasUnsavedInput) return;
+        (async () => {
+            try {
+                const quiz = await getQuizById(quizId);
+                if (!user || quiz.user_id !== user.id) {
+                    setNotFound(true);
+                    setLoading(false);
+                    return;
+                }
+                setMode(quiz.mode);
+                setTitle(quiz.title);
+                const normalized = quiz.questions.map((q) =>
+                    normalizeItem(quiz.mode, q),
+                );
+                setItems(normalized);
+                setOriginalSnapshot(
+                    JSON.stringify({
+                        title: quiz.title,
+                        mode: quiz.mode,
+                        items: normalized,
+                    }),
+                );
+            } catch (err) {
+                console.error(err);
+                setNotFound(true);
+            } finally {
+                setLoading(false);
+            }
+        })();
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [quizId, user]);
+
+    const currentSnapshot = JSON.stringify({ title, mode, items });
+    const hasUnsavedChanges =
+        !justSaved && !loading && currentSnapshot !== originalSnapshot;
+
+    useEffect(() => {
+        if (!hasUnsavedChanges) return;
 
         function handleBeforeUnload(e) {
             e.preventDefault();
@@ -50,7 +95,7 @@ export default function CreateQuiz() {
 
         function handlePopState() {
             window.history.pushState(null, "", window.location.href);
-            setPendingLeaveAction(() => () => navigate("/"));
+            setPendingLeaveAction(() => () => navigate("/library"));
             setShowLeaveWarning(true);
         }
 
@@ -62,10 +107,10 @@ export default function CreateQuiz() {
             window.removeEventListener("beforeunload", handleBeforeUnload);
             window.removeEventListener("popstate", handlePopState);
         };
-    }, [hasUnsavedInput, navigate]);
+    }, [hasUnsavedChanges, navigate]);
 
     function requestExit(action) {
-        if (hasUnsavedInput) {
+        if (hasUnsavedChanges) {
             setPendingLeaveAction(() => action);
             setShowLeaveWarning(true);
         } else {
@@ -82,13 +127,6 @@ export default function CreateQuiz() {
     function cancelLeave() {
         setShowLeaveWarning(false);
         setPendingLeaveAction(null);
-    }
-
-    function switchMode(m) {
-        requestExit(() => {
-            setMode(m);
-            setItems([m === "flashcard" ? emptyFlashcard() : emptyMcq()]);
-        });
     }
 
     function addItem() {
@@ -150,21 +188,16 @@ export default function CreateQuiz() {
             setError(validationError);
             return;
         }
-        if (!user) {
-            navigate("/auth");
-            return;
-        }
         setSaving(true);
         setError("");
         try {
-            await saveQuiz({
-                userId: user.id,
+            await updateQuizContent(quizId, {
                 title: title.trim(),
                 mode,
                 questions: items,
                 count: items.length,
             });
-            setJustSaved(true); // allow navigation without the warning firing
+            setJustSaved(true);
             navigate("/library");
         } catch (err) {
             setError("Failed to save: " + err.message);
@@ -173,9 +206,28 @@ export default function CreateQuiz() {
         }
     }
 
+    if (loading) return <div className="page-loading">Loading quiz…</div>;
+
+    if (notFound) {
+        return (
+            <div className="page">
+                <div className="error-box">
+                    This quiz couldn't be found, or you don't have permission to
+                    edit it.
+                </div>
+                <button
+                    className="btn btn-secondary"
+                    onClick={() => navigate("/library")}
+                >
+                    Back to Library
+                </button>
+            </div>
+        );
+    }
+
     return (
         <div className="page">
-            <h2>Create Your Own</h2>
+            <h2>Edit Quiz</h2>
             {error && <div className="error-box">{error}</div>}
 
             <div className="card">
@@ -185,27 +237,16 @@ export default function CreateQuiz() {
                         value={title}
                         onChange={(e) => setTitle(e.target.value)}
                         maxLength={80}
-                        placeholder="e.g. Chapter 4 Vocabulary"
                     />
                 </div>
-
-                <div className="option-group">
-                    <label>Type</label>
-                    <div className="option-row centered">
-                        <button
-                            className={`option-btn ${mode === "flashcard" ? "active" : ""}`}
-                            onClick={() => switchMode("flashcard")}
-                        >
-                            Flashcards
-                        </button>
-                        <button
-                            className={`option-btn ${mode === "mcq" ? "active" : ""}`}
-                            onClick={() => switchMode("mcq")}
-                        >
-                            Multiple Choice
-                        </button>
-                    </div>
-                </div>
+                <p className="muted small">
+                    Type:{" "}
+                    <strong>
+                        {mode === "mcq" ? "Multiple Choice" : "Flashcards"}
+                    </strong>{" "}
+                    (type can't be changed after creation — make a new quiz to
+                    switch types)
+                </p>
             </div>
 
             {items.map((item, idx) => (
@@ -320,14 +361,14 @@ export default function CreateQuiz() {
                     + Add {mode === "flashcard" ? "Flashcard" : "Question"}
                 </button>
                 <button className="btn" onClick={handleSave} disabled={saving}>
-                    {saving ? "Saving…" : "Save Quiz"}
+                    {saving ? "Saving…" : "Save Changes"}
                 </button>
             </div>
 
             <div className="nav-row centered" style={{ marginTop: "0.75rem" }}>
                 <button
                     className="btn-text danger"
-                    onClick={() => requestExit(() => navigate("/"))}
+                    onClick={() => requestExit(() => navigate("/library"))}
                 >
                     Cancel & Go Back
                 </button>
@@ -354,7 +395,7 @@ export default function CreateQuiz() {
                             className="muted"
                             style={{ marginBottom: "1.25rem" }}
                         >
-                            All unsaved changes will not be saved and you can't
+                            Your current attempt will not be saved and you can't
                             continue it later.
                         </p>
                         <div className="nav-row centered">

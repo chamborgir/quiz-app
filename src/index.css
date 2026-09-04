@@ -4,7 +4,7 @@
   --border: #EDE1CB;
   --text: #3A342A;
   --text-muted: #8B8171;
-  --accent: #F5C453;
+  --accent: #F0B94A;
   --accent-contrast: #3A2E14;
   --success: #4C9A6E;
   --success-bg: #E3F4E8;
@@ -34,6 +34,48 @@
   --grid-line: rgba(255, 255, 255, 0.035);
 }
 
+/* Pastel palettes — override bg/surface/border/accent per palette, per mode */
+[data-theme='light'][data-palette='cream'] {
+  --bg: #FBF3E4; --surface: #FFFDF8; --border: #EDE1CB; --accent: #F0B94A; --accent-contrast: #3A2E14;
+}
+[data-theme='dark'][data-palette='cream'] {
+  --bg: #2A2823; --surface: #34322B; --border: #47443A; --accent: #E8BE60; --accent-contrast: #2A2410;
+}
+
+[data-theme='light'][data-palette='pink'] {
+  --bg: #FCEEF3; --surface: #FFF9FB; --border: #F2D6E2; --accent: #E8A6C1; --accent-contrast: #4A1F30;
+}
+[data-theme='dark'][data-palette='pink'] {
+  --bg: #2C2429; --surface: #362C33; --border: #4A3A43; --accent: #D98FB0; --accent-contrast: #341823;
+}
+
+[data-theme='light'][data-palette='blue'] {
+  --bg: #EAF3FA; --surface: #F7FBFD; --border: #CFE3F0; --accent: #8EBBE0; --accent-contrast: #123049;
+}
+[data-theme='dark'][data-palette='blue'] {
+  --bg: #22282E; --surface: #2B333B; --border: #3D4750; --accent: #7FAED4; --accent-contrast: #0F2536;
+}
+
+[data-theme='light'][data-palette='green'] {
+  --bg: #EBF6EE; --surface: #F8FCF9; --border: #D2E9D8; --accent: #93C9A5; --accent-contrast: #16341F;
+}
+[data-theme='dark'][data-palette='green'] {
+  --bg: #212A24; --surface: #29342D; --border: #3B473F; --accent: #7FBE93; --accent-contrast: #12281A;
+}
+
+[data-theme='light'][data-palette='purple'] {
+  --bg: #F1ECFA; --surface: #FAF8FD; --border: #DDD1F0; --accent: #B79FD9; --accent-contrast: #2C1B45;
+}
+[data-theme='dark'][data-palette='purple'] {
+  --bg: #262133; --surface: #302A3E; --border: #423A54; --accent: #A78FCB; --accent-contrast: #211436;
+}
+
+[data-theme='light'][data-palette='red'] {
+  --bg: #FBEDEC; --surface: #FFF9F8; --border: #F0D3D1; --accent: #E39A97; --accent-contrast: #4A1512;
+}
+[data-theme='dark'][data-palette='red'] {
+  --bg: #2C2321; --surface: #362B29; --border: #4A3B38; --accent: #D08986; --accent-contrast: #331010;
+}
 * { box-sizing: border-box; }
 
 body {
@@ -135,6 +177,97 @@ body {
 @media (min-width: 480px) {
   .nav-email { display: inline; }
 }
+
+
+
+
+/* Navbar user menu */
+.user-menu-wrap {
+  position: relative;
+}
+
+.user-avatar-btn {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--accent);
+  color: var(--accent-contrast);
+  border: none;
+  font-weight: 700;
+  font-size: 0.9rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.user-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  min-width: 220px;
+  padding: 0.9rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.14);
+  z-index: 30;
+}
+
+.user-menu-email {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--text);
+  word-break: break-all;
+  padding-bottom: 0.75rem;
+  margin-bottom: 0.75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.user-menu-section-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-bottom: 0.6rem;
+}
+
+.palette-swatch-row {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 0.9rem;
+  padding-bottom: 0.9rem;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+
+.palette-swatch {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  padding: 0;
+}
+
+.palette-swatch.active {
+  border-color: var(--text);
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.user-menu-signout {
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: var(--error);
+  font-weight: 600;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.4rem 0;
+}
+
 
 /* Page layout */
 .page {
@@ -1067,6 +1200,13 @@ body {
   .quiz-menu {
     right: -8px;
     min-width: 130px;
+  }
+}
+
+@media (max-width: 420px) {
+  .user-menu {
+    right: -10px;
+    min-width: 200px;
   }
 }
 

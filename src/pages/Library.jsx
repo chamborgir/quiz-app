@@ -423,6 +423,16 @@ export default function Library({ setActiveQuiz }) {
                                         {openMenuId === quiz.id && (
                                             <div className="quiz-menu">
                                                 <button
+                                                    onClick={() => {
+                                                        setOpenMenuId(null);
+                                                        navigate(
+                                                            `/edit/${quiz.id}`,
+                                                        );
+                                                    }}
+                                                >
+                                                    Edit Questions
+                                                </button>
+                                                <button
                                                     onClick={() =>
                                                         startEdit(quiz)
                                                     }

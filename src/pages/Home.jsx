@@ -85,8 +85,8 @@ export default function Home({ setActiveQuiz }) {
             <div className="hero">
                 <h1>Turn any PDF into flashcards or a quiz</h1>
                 <p className="muted">
-                    Upload notes, a chapter, or an article — get a study set in
-                    seconds.
+                    Upload your notes, chapter, or article and generate a study
+                    set in seconds.
                 </p>
             </div>
 
