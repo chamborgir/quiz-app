@@ -592,7 +592,7 @@ export default function Library({ setActiveQuiz }) {
                                     e.key === "Enter" &&
                                     handleCreateCollection()
                                 }
-                                placeholder="e.g. Midterm Review"
+                                placeholder="e.g. ProfEd Review"
                             />
                         </div>
                         <div className="nav-row centered">
