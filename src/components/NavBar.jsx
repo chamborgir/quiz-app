@@ -19,7 +19,6 @@ export default function NavBar() {
             </Link>
             <nav className="nav-links">
                 {user && <Link to="/library">Library</Link>}
-                {user && <Link to="/create">Create</Link>}
                 <button
                     className="theme-toggle"
                     onClick={toggleTheme}

@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { Routes, Route } from "react-router-dom";
 import NavBar from "./components/NavBar.jsx";
+import Footer from "./components/Footer.jsx";
 import AuthPage from "./components/AuthPage.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import Home from "./pages/Home.jsx";
@@ -51,6 +52,7 @@ export default function App() {
                     element={<SharedQuiz setActiveQuiz={setActiveQuiz} />}
                 />
             </Routes>
+            <Footer />
         </div>
     );
 }

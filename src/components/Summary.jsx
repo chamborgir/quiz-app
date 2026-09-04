@@ -3,6 +3,8 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { saveQuiz, shareQuiz } from "../lib/quizApi.js";
 
+const PASS_THRESHOLD = 0.75;
+
 export default function Summary({
     mode,
     questions,
@@ -26,6 +28,10 @@ export default function Summary({
               0,
           )
         : null;
+    const percentage = isMcq ? score / questions.length : null;
+    const passed = isMcq ? percentage >= PASS_THRESHOLD : null;
+
+    const [showResultModal, setShowResultModal] = useState(isMcq);
 
     async function handleSave() {
         if (!user) {
@@ -64,6 +70,51 @@ export default function Summary({
 
     return (
         <div>
+            {showResultModal && (
+                <div
+                    className="modal-overlay"
+                    onClick={() => setShowResultModal(false)}
+                >
+                    <div
+                        className="modal-card result-modal"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            className="modal-close"
+                            onClick={() => setShowResultModal(false)}
+                            aria-label="Close"
+                        >
+                            ×
+                        </button>
+                        <div className="result-emoji">
+                            {passed ? "🎉" : "💪"}
+                        </div>
+                        <div className="score-number">
+                            {score} / {questions.length}
+                        </div>
+                        <p className="muted" style={{ marginBottom: "1rem" }}>
+                            {Math.round(percentage * 100)}% correct
+                        </p>
+                        {passed ? (
+                            <p className="result-message result-pass">
+                                Congrats! you're LEPT ready!
+                            </p>
+                        ) : (
+                            <p className="result-message result-encourage">
+                                Don't give up, you've got this. Review and try
+                                again!
+                            </p>
+                        )}
+                        <button
+                            className="btn"
+                            onClick={() => setShowResultModal(false)}
+                        >
+                            View Full Summary
+                        </button>
+                    </div>
+                </div>
+            )}
+
             {isMcq && (
                 <div className="score-banner">
                     <div className="score-number">

@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { saveQuiz } from "../lib/quizApi.js";
 import UploadStep from "../components/UploadStep.jsx";
@@ -92,7 +92,37 @@ export default function Home({ setActiveQuiz }) {
 
             {error && <div className="error-box">{error}</div>}
 
-            {step === "upload" && <UploadStep onExtracted={handleExtracted} />}
+            {step === "upload" && (
+                <>
+                    <UploadStep onExtracted={handleExtracted} />
+
+                    <div className="or-divider">
+                        <span>or</span>
+                    </div>
+
+                    {user ? (
+                        <Link
+                            to="/create"
+                            className="btn btn-secondary btn-block create-link"
+                        >
+                            Create Your Own Quiz
+                        </Link>
+                    ) : (
+                        <div className="card center-content">
+                            <p
+                                className="muted small"
+                                style={{ marginBottom: "0.75rem" }}
+                            >
+                                Sign in to create your own flashcards or
+                                questions manually.
+                            </p>
+                            <Link to="/auth" className="btn btn-secondary">
+                                Sign in to create
+                            </Link>
+                        </div>
+                    )}
+                </>
+            )}
 
             {step === "setup" && (
                 <SetupStep

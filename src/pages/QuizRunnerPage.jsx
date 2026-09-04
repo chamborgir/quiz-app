@@ -164,7 +164,7 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
     }
 
     return (
-        <div className="page">
+        <div className={`page ${mode === "mcq" ? "page-quiz" : ""}`}>
             {phase === "options" && <McqOptions onStart={handleStartOptions} />}
 
             {phase === "quiz" && mode === "flashcard" && (

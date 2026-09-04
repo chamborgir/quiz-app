@@ -1,8 +1,9 @@
 const MODEL = "gemini-3.5-flash-lite";
-const BATCH_SIZE = 50; // 50/100/150 all divide evenly into full-size batches
-const MAX_CONCURRENT = 3; // enough to cover 150 items (3 batches) in a single round
-const MAX_SOURCE_CHARS = 60000; // gemini-3.5-flash-lite has a 1M-token context, this is a cost/speed guard, not a hard limit
-const MAX_OUTPUT_TOKENS = 16000; // generous for a 50-item batch with explanations, well under the 65,536 cap
+const BATCH_SIZE = 50;
+const MAX_CONCURRENT = 3;
+const MAX_SOURCE_CHARS = 60000;
+const MAX_OUTPUT_TOKENS = 16000;
+const MAX_TOPUP_ROUNDS = 5; // safety cap so a stubborn shortfall can't loop forever
 
 export default async function handler(req, res) {
     if (req.method !== "POST") {
@@ -33,50 +34,70 @@ export default async function handler(req, res) {
         const sourceText = text.slice(0, MAX_SOURCE_CHARS);
         const targetCount = Math.min(Number(count) || 0, 150);
 
-        const batchSizes = [];
+        let batchCounter = 0;
+        const seen = new Set();
+        let deduped = [];
+
+        async function runBatches(sizes) {
+            const collected = [];
+            for (let i = 0; i < sizes.length; i += MAX_CONCURRENT) {
+                const chunk = sizes.slice(i, i + MAX_CONCURRENT);
+                const chunkPromises = chunk.map((size) => {
+                    const batchIndex = batchCounter++;
+                    return callGeminiWithRetry(
+                        apiKey,
+                        buildPrompt(mode, size, sourceText, batchIndex),
+                    ).catch((err) => {
+                        console.error(
+                            `Batch ${batchIndex} failed permanently:`,
+                            err.message,
+                        );
+                        return [];
+                    });
+                });
+                const chunkResults = await Promise.all(chunkPromises);
+                collected.push(...chunkResults.flat());
+            }
+            return collected;
+        }
+
+        function mergeUnique(newItems) {
+            for (const q of newItems) {
+                const key = mode === "flashcard" ? q.front : q.question;
+                if (!key || seen.has(key)) continue;
+                seen.add(key);
+                deduped.push(q);
+            }
+        }
+
+        // Initial full pass
+        const initialSizes = [];
         let remaining = targetCount;
         while (remaining > 0) {
             const size = Math.min(BATCH_SIZE, remaining);
-            batchSizes.push(size);
+            initialSizes.push(size);
             remaining -= size;
         }
+        mergeUnique(await runBatches(initialSizes));
 
-        const allQuestions = [];
-        const errors = [];
-
-        for (let i = 0; i < batchSizes.length; i += MAX_CONCURRENT) {
-            const chunk = batchSizes.slice(i, i + MAX_CONCURRENT);
-            const chunkPromises = chunk.map((size, j) => {
-                const batchIndex = i + j;
-                return callGeminiWithRetry(
-                    apiKey,
-                    buildPrompt(mode, size, sourceText, batchIndex),
-                ).catch((err) => {
-                    console.error(
-                        `Batch ${batchIndex} failed permanently:`,
-                        err.message,
-                    );
-                    errors.push(err.message);
-                    return [];
-                });
-            });
-            const chunkResults = await Promise.all(chunkPromises);
-            allQuestions.push(...chunkResults.flat());
+        // Top-up passes: keep requesting exactly the shortfall until we hit the target
+        let topupRound = 0;
+        while (deduped.length < targetCount && topupRound < MAX_TOPUP_ROUNDS) {
+            const shortfall = targetCount - deduped.length;
+            const topupSizes = [];
+            let rem = shortfall;
+            while (rem > 0) {
+                const size = Math.min(BATCH_SIZE, rem);
+                topupSizes.push(size);
+                rem -= size;
+            }
+            mergeUnique(await runBatches(topupSizes));
+            topupRound++;
         }
-
-        const seen = new Set();
-        const deduped = allQuestions.filter((q) => {
-            const key = mode === "flashcard" ? q.front : q.question;
-            if (!key || seen.has(key)) return false;
-            seen.add(key);
-            return true;
-        });
 
         if (deduped.length === 0) {
             res.status(500).json({
-                error: errors.length
-                    ? `The model did not return any questions. Details: ${errors[0]}`
-                    : "The model did not return any questions. Try again.",
+                error: "The model did not return any questions. Try again.",
             });
             return;
         }
@@ -91,35 +112,41 @@ export default async function handler(req, res) {
 }
 
 function buildPrompt(mode, count, sourceText, batchIndex) {
+    const languageInstruction = `IMPORTANT LANGUAGE RULE: The source material may be in a single language or a mix of languages (e.g. Filipino/Tagalog and English). For each question you generate, write it in the SAME language as the specific part of the source material it is based on. Do not translate — if the sentence or paragraph you're basing a question on is in Filipino, write that question, its choices/answer, and explanation entirely in Filipino. If it's in English, write in English. If the source material mixes languages throughout, your generated questions should naturally mix too, matching each question to its source language.`;
+
     if (mode === "flashcard") {
         return `You are creating study flashcards from the source material below.
-Generate exactly ${count} flashcards as a JSON array.
+Generate EXACTLY ${count} flashcards — not fewer, not more — as a JSON array. Count your output before responding and confirm it has exactly ${count} items.
 Each item must be an object with exactly these keys:
 - "front": a short question or term (string)
 - "back": the answer or definition (string)
 
+${languageInstruction}
+
 This is batch #${batchIndex + 1} of a larger set — focus on a distinct slice/section of the material so batches don't overlap in topic.
 Base every flashcard strictly on the source material.
-Respond with ONLY a valid JSON array. No markdown, no commentary, no code fences.
+Respond with ONLY a valid JSON array of exactly ${count} items. No markdown, no commentary, no code fences.
 
 SOURCE MATERIAL:
 """${sourceText}"""`;
     }
 
     return `You are creating a multiple-choice quiz from the source material below.
-Generate exactly ${count} questions as a JSON array.
+Generate EXACTLY ${count} questions — not fewer, not more — as a JSON array. Count your output before responding and confirm it has exactly ${count} items.
 Each item must be an object with exactly these keys:
 - "question": the question text (string)
 - "choices": an array of exactly 4 answer strings
 - "correctIndex": integer 0-3, the index of the correct choice in "choices"
 - "explanation": a short 1-2 sentence explanation of why that answer is correct
 
+${languageInstruction}
+
 Rules:
 - Only one choice should be correct.
 - Make wrong choices plausible, not obviously wrong.
 - This is batch #${batchIndex + 1} of a larger set — focus on a distinct slice/section of the material so batches don't overlap in topic.
 - Base every question strictly on the source material.
-Respond with ONLY a valid JSON array. No markdown, no commentary, no code fences.
+Respond with ONLY a valid JSON array of exactly ${count} items. No markdown, no commentary, no code fences.
 
 SOURCE MATERIAL:
 """${sourceText}"""`;

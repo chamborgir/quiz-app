@@ -33,6 +33,14 @@ export async function deleteQuiz(quizId) {
     if (error) throw error;
 }
 
+export async function assignQuizToCollection(quizId, collectionId) {
+    const { error } = await supabase
+        .from("quizzes")
+        .update({ collection_id: collectionId })
+        .eq("id", quizId);
+    if (error) throw error;
+}
+
 function generateShareCode() {
     return crypto.randomUUID().replace(/-/g, "").slice(0, 10);
 }
@@ -97,4 +105,42 @@ export async function listAttempts(quizId) {
         .order("attempted_at", { ascending: false });
     if (error) throw error;
     return data;
+}
+
+// --- Collections ---
+
+export async function listCollections(userId) {
+    const { data, error } = await supabase
+        .from("collections")
+        .select("*")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
+    if (error) throw error;
+    return data;
+}
+
+export async function createCollection(userId, name) {
+    const { data, error } = await supabase
+        .from("collections")
+        .insert({ user_id: userId, name })
+        .select()
+        .single();
+    if (error) throw error;
+    return data;
+}
+
+export async function renameCollection(collectionId, name) {
+    const { error } = await supabase
+        .from("collections")
+        .update({ name })
+        .eq("id", collectionId);
+    if (error) throw error;
+}
+
+export async function deleteCollection(collectionId) {
+    const { error } = await supabase
+        .from("collections")
+        .delete()
+        .eq("id", collectionId);
+    if (error) throw error;
 }
