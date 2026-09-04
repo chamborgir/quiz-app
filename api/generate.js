@@ -4,21 +4,24 @@ const MAX_CONCURRENT = 3;
 const MAX_SOURCE_CHARS = 60000;
 const MAX_OUTPUT_TOKENS = 16000;
 const MAX_TOPUP_ROUNDS = 6;
-const MAX_TOPUP_ROUNDS_EXTRACT = 2; // extraction can't invent content, so cap retries lower
 const NUM_CHUNKS = 6;
 
 const VERIFY_BATCH_SIZE = 30;
 const VERIFY_MAX_CONCURRENT = 5;
+const VERIFY_OUTPUT_TOKENS = 12000;
 
+// Catches questions that reference the source document's own numbering/labeling instead of being self-contained
 const SELF_REFERENTIAL_PATTERNS = [
     /\bproblem\s*#?\d+\b/i,
     /\bquestion\s*#?\d+\b/i,
     /\bpage\s*\d+\s*(of\s*\d+)?\b/i,
+    /\bexam\s*(a|b|c|d)?\b.*\bpage\b/i,
     /\bstatement\s*\(?[ivxlc]+\)?/i,
     /\bchoice\s*\([a-d]\)/i,
     /\boption\s*\([a-e]\)/i,
     /\bin\s+(the\s+)?(above|previous|following)\s+(problem|question|statement|exercise)\b/i,
     /\bwhat\s+(is|are)\s+(the\s+)?option/i,
+    /\bfor\s+(the\s+)?(problem|question)\s*\d*\b/i,
     /\bthe\s+source\s+material\b/i,
     /\bthe\s+document\b/i,
     /\bat\s+the\s+(very\s+)?beginning\s+of\b/i,
@@ -32,14 +35,10 @@ function isSelfReferential(text) {
     return SELF_REFERENTIAL_PATTERNS.some((re) => re.test(text));
 }
 
-function isValidItem(mode, item, sourceMode) {
+function isValidItem(mode, item) {
     if (mode === "flashcard") {
         if (!item.front || !item.back) return false;
-        if (sourceMode === "ai")
-            return (
-                !isSelfReferential(item.front) && !isSelfReferential(item.back)
-            );
-        return true;
+        return !isSelfReferential(item.front) && !isSelfReferential(item.back);
     }
     if (
         !item.question ||
@@ -47,16 +46,8 @@ function isValidItem(mode, item, sourceMode) {
         item.choices.length !== 4
     )
         return false;
-    if (
-        typeof item.correctIndex !== "number" ||
-        item.correctIndex < 0 ||
-        item.correctIndex > 3
-    )
-        return false;
-    if (sourceMode === "ai") {
-        if (isSelfReferential(item.question)) return false;
-        if (item.choices.some((c) => isSelfReferential(c))) return false;
-    }
+    if (isSelfReferential(item.question)) return false;
+    if (item.choices.some((c) => isSelfReferential(c))) return false;
     return true;
 }
 
@@ -67,7 +58,7 @@ export default async function handler(req, res) {
     }
 
     try {
-        const { text, mode, count, sourceMode = "ai" } = req.body || {};
+        const { text, mode, count } = req.body || {};
 
         if (!text || !mode || !count) {
             res.status(400).json({ error: "Missing required fields." });
@@ -116,22 +107,16 @@ export default async function handler(req, res) {
                     const batchIndex = batchCounter++;
                     const chunkText = getChunk(batchIndex);
                     const avoidList = recentQuestionSummaries();
-                    const prompt =
-                        sourceMode === "extract"
-                            ? buildExtractPrompt(
-                                  mode,
-                                  size,
-                                  chunkText,
-                                  avoidList,
-                              )
-                            : buildPrompt(
-                                  mode,
-                                  size,
-                                  chunkText,
-                                  batchIndex,
-                                  avoidList,
-                              );
-                    return callGeminiWithRetry(apiKey, prompt).catch((err) => {
+                    return callGeminiWithRetry(
+                        apiKey,
+                        buildPrompt(
+                            mode,
+                            size,
+                            chunkText,
+                            batchIndex,
+                            avoidList,
+                        ),
+                    ).catch((err) => {
                         console.error(
                             `Batch ${batchIndex} failed permanently:`,
                             err.message,
@@ -146,7 +131,7 @@ export default async function handler(req, res) {
 
         function mergeValid(newItems) {
             for (const q of newItems) {
-                if (!isValidItem(mode, q, sourceMode)) continue;
+                if (!isValidItem(mode, q)) continue; // silently drop self-referential / malformed items
                 const key = mode === "flashcard" ? q.front : q.question;
                 if (!key || seen.has(key)) continue;
                 seen.add(key);
@@ -163,12 +148,8 @@ export default async function handler(req, res) {
         }
         await runBatches(initialSizes);
 
-        const maxTopups =
-            sourceMode === "extract"
-                ? MAX_TOPUP_ROUNDS_EXTRACT
-                : MAX_TOPUP_ROUNDS;
         let topupRound = 0;
-        while (deduped.length < targetCount && topupRound < maxTopups) {
+        while (deduped.length < targetCount && topupRound < MAX_TOPUP_ROUNDS) {
             const shortfall = targetCount - deduped.length;
             const topupSizes = [];
             let rem = shortfall;
@@ -177,18 +158,13 @@ export default async function handler(req, res) {
                 topupSizes.push(size);
                 rem -= size;
             }
-            const before = deduped.length;
             await runBatches(topupSizes);
-            if (sourceMode === "extract" && deduped.length === before) break; // no new content found, stop retrying
             topupRound++;
         }
 
         if (deduped.length === 0) {
             res.status(500).json({
-                error:
-                    sourceMode === "extract"
-                        ? 'No extractable questions were found in this PDF. Try "AI Generated" mode instead.'
-                        : "The model did not return any valid questions. Try again.",
+                error: "The model did not return any valid questions. Try again.",
             });
             return;
         }
@@ -229,10 +205,14 @@ async function verifyAnswers(apiKey, questions, sourceText) {
                 buildVerifyPrompt(chunk, sourceText),
             )
                 .then((result) => {
-                    verifiedChunks[chunkIdx] =
-                        Array.isArray(result) && result.length === chunk.length
-                            ? result
-                            : chunk;
+                    if (
+                        Array.isArray(result) &&
+                        result.length === chunk.length
+                    ) {
+                        verifiedChunks[chunkIdx] = result;
+                    } else {
+                        verifiedChunks[chunkIdx] = chunk;
+                    }
                 })
                 .catch(() => {
                     verifiedChunks[chunkIdx] = chunk;
@@ -247,9 +227,9 @@ async function verifyAnswers(apiKey, questions, sourceText) {
 function buildVerifyPrompt(questionChunk, sourceText) {
     return `You are a strict fact-checker reviewing a multiple-choice quiz for accuracy against its source material.
 
-For each question below, verify "correctIndex" truly points to the correct choice per the SOURCE MATERIAL. Fix it if wrong. Preserve $...$ math notation and \\n line breaks. Ensure every math symbol is wrapped in single $ signs.
+For each question below, verify that "correctIndex" truly points to the factually correct choice, based strictly on the SOURCE MATERIAL. If it is already correct, leave the item unchanged. If it is wrong, fix "correctIndex" (and rewrite "explanation" if needed) so it is accurate. Preserve any $...$ math notation and \\n line breaks exactly as given. Ensure EVERY math symbol (like \\infty, \\sqrt, fractions, exponents) in "question", "choices", and "explanation" is wrapped in single $ signs — if you find one that isn't wrapped, fix it.
 
-Return a JSON array, same length and order, same keys ("question","choices","correctIndex","explanation"). Respond with ONLY the JSON array.
+Return a JSON array with the EXACT SAME NUMBER of items, in the EXACT SAME ORDER, same keys ("question","choices","correctIndex","explanation") — just corrected where needed. Respond with ONLY the JSON array, no markdown, no commentary.
 
 QUESTIONS TO VERIFY:
 ${JSON.stringify(questionChunk)}
@@ -258,55 +238,20 @@ SOURCE MATERIAL:
 """${sourceText}"""`;
 }
 
-function buildExtractPrompt(mode, count, sourceText, avoidList) {
-    const mathInstruction = `Write ALL math using LaTeX wrapped in single dollar signs (e.g. $x^2$, $\\infty$, $\\frac{a}{b}$), matching what appears in the source, even if the source uses plain text for it.`;
-
-    if (mode === "flashcard") {
-        return `The text below is an exam, worksheet, or study material that already contains its own questions and answers (or facts that pair naturally as a question/answer).
-
-Extract up to ${count} existing question-and-answer pairs VERBATIM from this text — do not invent, paraphrase, or rephrase. Only fix obvious OCR/extraction typos (broken spacing, garbled characters). If the source doesn't clearly pair a question with its answer, skip it rather than guessing.
-
-${mathInstruction}
-
-Do not repeat any of these already-used items: ${avoidList}
-
-If this excerpt has no extractable Q&A content, return an empty JSON array: []
-
-Return a JSON array of objects: {"front": "the exact original question/term", "back": "the exact original answer/definition"}. Respond with ONLY the JSON array, no markdown, no commentary.
-
-SOURCE TEXT:
-"""${sourceText}"""`;
-    }
-
-    return `The text below is an exam, worksheet, or study material that already contains its own multiple-choice questions with their own answer choices.
-
-Extract up to ${count} existing multiple-choice questions VERBATIM from this text — copy the exact original question wording and exact original choice wording. Do NOT invent new questions, do NOT paraphrase, do NOT create questions about page numbers, problem numbers, or labels — only copy real question content that is actually present. Only fix obvious OCR/extraction typos.
-
-For each extracted question:
-- If the source shows an answer key or indicates the correct answer, use that to set "correctIndex".
-- If no answer key is visible, use your own subject-matter judgment to determine which choice is correct.
-- Write a brief 1-2 sentence "explanation" for why that answer is correct.
-
-${mathInstruction}
-
-Do not repeat any of these already-used questions: ${avoidList}
-
-If this excerpt has no extractable multiple-choice questions, return an empty JSON array: []
-
-Return a JSON array of objects: {"question": "exact original question", "choices": [4 exact original choice strings], "correctIndex": 0-3, "explanation": "string"}. Respond with ONLY the JSON array, no markdown, no commentary.
-
-SOURCE TEXT:
-"""${sourceText}"""`;
-}
-
 function buildPrompt(mode, count, sourceText, batchIndex, avoidList) {
     const languageInstruction = `IMPORTANT LANGUAGE RULE: The source material below may mix languages (e.g. Filipino/Tagalog sentences next to English ones). Read it sentence by sentence or paragraph by paragraph — do NOT judge the "overall" language of the whole document. For EACH question you write, base it on one specific sentence or paragraph, and write that question (plus its choices/answer/explanation) in the SAME language as that specific sentence or paragraph.`;
 
     const formattingInstruction = `FORMATTING RULE: If a question includes a list of enumerated statements (e.g. "I. ... II. ..." or "1. ... 2. ..."), insert a literal newline (\\n) before each item so each appears on its own line.`;
 
-    const mathInstruction = `MATH FORMATTING RULE: Write ALL math using LaTeX wrapped in single dollar signs — every symbol, not just full equations. Examples: $x^2 + 3x - 4 = 0$, $\\frac{a}{b}$, $\\sqrt{16}$, $\\infty$, $-\\infty$, $\\pi$. Apply this in "question", "choices", "front", "back", and "explanation" wherever math appears.`;
+    const mathInstruction = `MATH FORMATTING RULE: Write ALL math using LaTeX wrapped in single dollar signs — this includes every symbol, not just full equations. Examples: $x^2 + 3x - 4 = 0$, $\\frac{a}{b}$, $\\sqrt{16}$, $\\infty$, $-\\infty$, $\\pi$. Even a single symbol like infinity must be $\\infty$, never a bare "infinity" or unwrapped "\\infty". Apply this in "question", "choices", "front", "back", and "explanation" wherever math appears.`;
 
-    const selfContainedInstruction = `SELF-CONTAINED RULE — CRITICAL: The source material may already be a worksheet or exam with its own numbered questions/problems, lettered choices, page numbers, and section labels. You are FORBIDDEN from writing any question that mentions or depends on this original numbering/labeling, such as "What is choice (C) for problem 7?" or "What page number is Page 2?" or "In statement (i) of problem 4...". Instead, extract the actual underlying content and ask about it directly, fully self-contained, with zero references to "the source," "the document," "question N," "problem N," "page N," or any external numbering.`;
+    const selfContainedInstruction = `SELF-CONTAINED RULE — CRITICAL, READ CAREFULLY: The source material may already be a worksheet or exam with its own numbered questions/problems, lettered choices, page numbers, and section labels (e.g. "Problem 7", "Page 2 of 8", "Statement (i)", "Choice (C)"). You are FORBIDDEN from writing any question that mentions or depends on this original numbering/labeling. This means you must NEVER write anything shaped like these real examples of what NOT to do:
+- "What is choice (C) for the limit evaluation in problem 7?" ❌
+- "What page number is indicated for Page 2 of the exam?" ❌
+- "In statement (i) of problem 4, what are the two time values mentioned?" ❌
+- "What name is given at the very beginning of the source material?" ❌
+Instead, extract the actual underlying content and ask about THAT directly, as a standalone question with no reference to where it came from. Correct version of the first bad example above: "What is $\\lim_{x \\to 0} x^4 \\sin(1/x)$?" with real choices like $0$, $1$, $-\\infty$, $\\infty$ (each properly wrapped in $ signs) — no mention of "problem 7" or "choice (C)" anywhere.
+Before including a question in your output, silently re-check it: does it mention "problem", "question", "page", "statement", "choice (X)", "option (X)", "the document", "the source", "the beginning", "the diagram", "the graph", or any exam/worksheet label? If yes, REWRITE it to remove that reference and ask about the real content instead, or discard it and pick different content.`;
 
     const noDiagramInstruction = `TEXT-ONLY RULE: Only extractable text is available — no images or diagrams. Never reference "the diagram," "the graph," "the figure," or ask the reader to look at anything visual.`;
 
@@ -360,28 +305,6 @@ async function callGeminiWithRetry(apiKey, prompt, retries = 1) {
     }
 }
 
-// Fixes invalid backslash escapes (common with LaTeX like \infty, \frac) that break JSON.parse
-function repairJsonEscapes(str) {
-    return str.replace(/\\(?!["\\/bfnrtu])/g, "\\\\");
-}
-
-function safeParseJsonArray(rawText) {
-    const attempts = [rawText, rawText.replace(/```json|```/g, "").trim()];
-    attempts.push(repairJsonEscapes(attempts[1]));
-
-    for (const attempt of attempts) {
-        try {
-            const parsed = JSON.parse(attempt);
-            if (Array.isArray(parsed)) return parsed;
-        } catch {
-            // try next attempt
-        }
-    }
-    throw new Error(
-        "Could not parse Gemini response as valid JSON, even after repair.",
-    );
-}
-
 async function callGemini(apiKey, prompt) {
     const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
 
@@ -408,5 +331,13 @@ async function callGemini(apiKey, prompt) {
     const rawText = data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!rawText) throw new Error("Gemini returned an empty response.");
 
-    return safeParseJsonArray(rawText);
+    let parsed;
+    try {
+        parsed = JSON.parse(rawText);
+    } catch {
+        parsed = JSON.parse(rawText.replace(/```json|```/g, "").trim());
+    }
+    if (!Array.isArray(parsed))
+        throw new Error("Gemini response was not a JSON array.");
+    return parsed;
 }
