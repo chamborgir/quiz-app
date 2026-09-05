@@ -5,8 +5,6 @@ import {
     listQuizzes,
     renameQuiz,
     deleteQuiz,
-    shareQuiz,
-    unshareQuiz,
     listAttempts,
     assignQuizToCollection,
     listCollections,
@@ -14,8 +12,8 @@ import {
     renameCollection,
     deleteCollection,
     touchQuizAccess,
-    shareCollection,
-    unshareCollection,
+    getOrCreateShareCode,
+    getOrCreateCollectionShareCode,
 } from "../lib/quizApi.js";
 
 const PAGE_SIZE = 10;
@@ -122,10 +120,9 @@ export default function Library({ setActiveQuiz }) {
         await deleteQuiz(quizId);
         setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
     }
-
-    async function handleShare(quiz) {
+    async function handleCopyShareLink(quiz) {
         setOpenMenuId(null);
-        const code = await shareQuiz(quiz.id, quiz.share_code);
+        const code = await getOrCreateShareCode(quiz.id, quiz.share_code);
         const link = `${window.location.origin}/shared/${code}`;
         setShareLinks((prev) => ({ ...prev, [quiz.id]: link }));
         setQuizzes((prev) =>
@@ -136,17 +133,6 @@ export default function Library({ setActiveQuiz }) {
             ),
         );
         await navigator.clipboard.writeText(link).catch(() => {});
-    }
-
-    async function handleUnshare(quiz) {
-        setOpenMenuId(null);
-        await unshareQuiz(quiz.id);
-        setQuizzes((prev) =>
-            prev.map((q) =>
-                q.id === quiz.id ? { ...q, is_public: false } : q,
-            ),
-        );
-        setShareLinks((prev) => ({ ...prev, [quiz.id]: "" }));
     }
 
     async function toggleHistory(quiz) {
@@ -259,9 +245,8 @@ export default function Library({ setActiveQuiz }) {
             setTab("all");
         }
     }
-
-    async function handleShareCollection(collection) {
-        const code = await shareCollection(
+    async function handleCopyGroupShareLink(collection) {
+        const code = await getOrCreateCollectionShareCode(
             collection.id,
             collection.share_code,
         );
@@ -276,17 +261,6 @@ export default function Library({ setActiveQuiz }) {
         );
         await navigator.clipboard.writeText(link).catch(() => {});
     }
-
-    async function handleUnshareCollection(collection) {
-        await unshareCollection(collection.id);
-        setCollections((prev) =>
-            prev.map((c) =>
-                c.id === collection.id ? { ...c, is_public: false } : c,
-            ),
-        );
-        setCollectionShareLinks((prev) => ({ ...prev, [collection.id]: "" }));
-    }
-
     function viewCollection(collectionId) {
         setCollectionFilter(collectionId);
         setTab("all");
@@ -495,23 +469,15 @@ export default function Library({ setActiveQuiz }) {
                                                         ? "Change Group"
                                                         : "Add to Group"}
                                                 </button>
-                                                {quiz.is_public ? (
-                                                    <button
-                                                        onClick={() =>
-                                                            handleUnshare(quiz)
-                                                        }
-                                                    >
-                                                        Unshare
-                                                    </button>
-                                                ) : (
-                                                    <button
-                                                        onClick={() =>
-                                                            handleShare(quiz)
-                                                        }
-                                                    >
-                                                        Share
-                                                    </button>
-                                                )}
+                                                <button
+                                                    onClick={() =>
+                                                        handleCopyShareLink(
+                                                            quiz,
+                                                        )
+                                                    }
+                                                >
+                                                    Copy Share Link
+                                                </button>
                                                 <button
                                                     className="danger"
                                                     onClick={() =>
@@ -756,29 +722,14 @@ export default function Library({ setActiveQuiz }) {
                                             Rename
                                         </button>
                                     )}
-                                    {collection.is_public ? (
-                                        <button
-                                            className="btn-text"
-                                            onClick={() =>
-                                                handleUnshareCollection(
-                                                    collection,
-                                                )
-                                            }
-                                        >
-                                            Unshare
-                                        </button>
-                                    ) : (
-                                        <button
-                                            className="btn-text"
-                                            onClick={() =>
-                                                handleShareCollection(
-                                                    collection,
-                                                )
-                                            }
-                                        >
-                                            Share Group
-                                        </button>
-                                    )}
+                                    <button
+                                        className="btn-text"
+                                        onClick={() =>
+                                            handleCopyGroupShareLink(collection)
+                                        }
+                                    >
+                                        Copy Share Link
+                                    </button>
                                     <button
                                         className="btn-text danger"
                                         onClick={() =>

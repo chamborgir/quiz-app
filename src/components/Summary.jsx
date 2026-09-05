@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
-import { saveQuiz, shareQuiz, updateSingleQuestion } from "../lib/quizApi.js";
+import { saveQuiz, getOrCreateShareCode } from "../lib/quizApi.js";
 import FormattedText from "./FormattedText.jsx";
 
 const PASS_THRESHOLD = 0.75;
@@ -87,7 +87,6 @@ export default function Summary({
             setSaving(false);
         }
     }
-
     async function handleShareClick() {
         setSharing(true);
         try {
@@ -96,7 +95,7 @@ export default function Summary({
                 id = await doSave();
                 if (!id) return;
             }
-            const code = await shareQuiz(id);
+            const code = await getOrCreateShareCode(id);
             const link = `${window.location.origin}/shared/${code}`;
             setShareLink(link);
             await navigator.clipboard.writeText(link).catch(() => {});

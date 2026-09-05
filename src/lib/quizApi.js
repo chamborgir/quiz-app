@@ -256,3 +256,16 @@ export async function cloneCollectionWithQuizzes(
     }
     return newCollection;
 }
+
+export async function getOrCreateShareCode(quizId, existingCode) {
+    if (existingCode) return existingCode;
+    return shareQuiz(quizId);
+}
+
+export async function getOrCreateCollectionShareCode(
+    collectionId,
+    existingCode,
+) {
+    if (existingCode) return existingCode;
+    return shareCollection(collectionId);
+}
