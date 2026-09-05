@@ -123,12 +123,12 @@ export default function MultipleChoice({
                 )}
             </div>
 
-            {current.imageUrl && (
-                <img src={current.imageUrl} alt="" className="quiz-image" />
-            )}
             <div className="question-text">
                 <FormattedText text={current.question} />
             </div>
+            {current.imageUrl && (
+                <img src={current.imageUrl} alt="" className="quiz-image" />
+            )}
 
             {current.choices.map((choice, i) => {
                 let cls = "choice";

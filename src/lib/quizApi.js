@@ -193,3 +193,11 @@ export async function updateSingleQuestion(
         count: questions.length,
     });
 }
+
+export async function touchQuizAccess(quizId) {
+    const { error } = await supabase
+        .from("quizzes")
+        .update({ last_accessed_at: new Date().toISOString() })
+        .eq("id", quizId);
+    if (error) console.error("Failed to update last accessed:", error.message);
+}

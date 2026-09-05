@@ -13,6 +13,7 @@ import {
     createCollection,
     renameCollection,
     deleteCollection,
+    touchQuizAccess,
 } from "../lib/quizApi.js";
 
 const PAGE_SIZE = 10;
@@ -85,6 +86,7 @@ export default function Library({ setActiveQuiz }) {
     }
 
     function startPlay(quiz) {
+        touchQuizAccess(quiz.id); // fire-and-forget, don't block navigation on it
         setActiveQuiz({
             mode: quiz.mode,
             questions: quiz.questions,
@@ -283,6 +285,16 @@ export default function Library({ setActiveQuiz }) {
                     a.mode.localeCompare(b.mode) ||
                     new Date(b.created_at) - new Date(a.created_at),
             );
+        } else if (sortBy === "recent") {
+            list.sort((a, b) => {
+                const aTime = a.last_accessed_at
+                    ? new Date(a.last_accessed_at).getTime()
+                    : 0;
+                const bTime = b.last_accessed_at
+                    ? new Date(b.last_accessed_at).getTime()
+                    : 0;
+                return bTime - aTime; // most recently accessed first; never-accessed quizzes sink to the bottom
+            });
         }
         return list;
     }, [quizzes, sortBy, collectionFilter]);
@@ -365,6 +377,12 @@ export default function Library({ setActiveQuiz }) {
                                 onClick={() => changeSort("type")}
                             >
                                 Type
+                            </button>
+                            <button
+                                className={`option-btn ${sortBy === "recent" ? "active" : ""}`}
+                                onClick={() => changeSort("recent")}
+                            >
+                                Recent
                             </button>
                         </div>
                     </div>
@@ -483,6 +501,15 @@ export default function Library({ setActiveQuiz }) {
                             <p className="muted small">
                                 {quiz.count} items ·{" "}
                                 {new Date(quiz.created_at).toLocaleDateString()}
+                                {quiz.last_accessed_at && (
+                                    <>
+                                        {" "}
+                                        · Last taken{" "}
+                                        {new Date(
+                                            quiz.last_accessed_at,
+                                        ).toLocaleDateString()}
+                                    </>
+                                )}
                                 {quiz.collection_id && (
                                     <>
                                         {" "}

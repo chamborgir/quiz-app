@@ -42,17 +42,36 @@ export default function Flashcards({ questions, onFinish }) {
             >
                 <div className="flashcard-inner">
                     <div className="flashcard-face flashcard-front">
-                        {current.imageUrl && (
-                            <img
-                                src={current.imageUrl}
-                                alt=""
-                                className="quiz-image"
-                            />
+                        {current.imageUrl &&
+                            current.imagePosition !== "back" &&
+                            current.frontDisplay !== "text" && (
+                                <img
+                                    src={current.imageUrl}
+                                    alt=""
+                                    className="quiz-image"
+                                />
+                            )}
+                        {(!current.imageUrl ||
+                            current.imagePosition === "back" ||
+                            current.frontDisplay !== "image") && (
+                            <FormattedText text={current.front} />
                         )}
-                        <FormattedText text={current.front} />
                     </div>
                     <div className="flashcard-face flashcard-back">
-                        <FormattedText text={current.back} />
+                        {current.imageUrl &&
+                            current.imagePosition === "back" &&
+                            current.frontDisplay !== "text" && (
+                                <img
+                                    src={current.imageUrl}
+                                    alt=""
+                                    className="quiz-image"
+                                />
+                            )}
+                        {(!current.imageUrl ||
+                            current.imagePosition !== "back" ||
+                            current.frontDisplay !== "image") && (
+                            <FormattedText text={current.back} />
+                        )}
                     </div>
                 </div>
             </div>

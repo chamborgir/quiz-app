@@ -105,7 +105,8 @@ function McqOptions({ onStart }) {
                     </button>
                 </div>
                 {passRateMode === "slider" && (
-                    <div className="pass-slider-row">
+                    <div className="pass-slider-wrap">
+                        <div className="pass-slider-value">{passRate}%</div>
                         <input
                             type="range"
                             min="50"
@@ -116,7 +117,10 @@ function McqOptions({ onStart }) {
                             }
                             className="pass-slider"
                         />
-                        <span className="pass-slider-value">{passRate}%</span>
+                        <div className="pass-slider-labels">
+                            <span>50%</span>
+                            <span>100%</span>
+                        </div>
                     </div>
                 )}
             </div>
@@ -348,7 +352,7 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
                                 onClick={cancelLeave}
                             >
                                 Stay on Quiz
-                            </button> 
+                            </button>
                             <button className="btn" onClick={confirmLeave}>
                                 Leave Anyway
                             </button>

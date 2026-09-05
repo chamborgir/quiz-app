@@ -11,6 +11,7 @@ export const PALETTES = [
     { id: "green", label: "Green", swatch: "#93C9A5" },
     { id: "purple", label: "Purple", swatch: "#B79FD9" },
     { id: "red", label: "Red", swatch: "#E39A97" },
+    { id: "brown", label: "Brown", swatch: "#B8967A" },
 ];
 
 export function ThemeProvider({ children }) {

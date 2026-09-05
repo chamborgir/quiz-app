@@ -5,7 +5,21 @@ import { saveQuiz } from "../lib/quizApi.js";
 import { uploadQuizImage } from "../lib/imageApi.js";
 
 function emptyFlashcard() {
-    return { front: "", back: "", imageUrl: "" };
+    return {
+        front: "",
+        back: "",
+        imageUrl: "",
+        imagePosition: "front",
+        frontDisplay: "text",
+    };
+}
+
+function setFrontDisplay(idx, display) {
+    setItems((prev) =>
+        prev.map((it, i) =>
+            i === idx ? { ...it, frontDisplay: display } : it,
+        ),
+    );
 }
 
 function emptyMcq() {
@@ -154,6 +168,14 @@ export default function CreateQuiz() {
         );
     }
 
+    function setImagePosition(idx, position) {
+        setItems((prev) =>
+            prev.map((it, i) =>
+                i === idx ? { ...it, imagePosition: position } : it,
+            ),
+        );
+    }
+
     function validate() {
         if (!title.trim()) return "Please give your quiz a title.";
         if (items.length === 0) return "Add at least one item.";
@@ -217,7 +239,6 @@ export default function CreateQuiz() {
                         placeholder="e.g. Chapter 4 Vocabulary"
                     />
                 </div>
-
                 <div className="option-group">
                     <label>Type</label>
                     <div className="option-row centered">
@@ -259,12 +280,103 @@ export default function CreateQuiz() {
                                     src={item.imageUrl}
                                     alt="Question visual"
                                 />
-                                <button
-                                    className="btn-text danger"
-                                    onClick={() => removeImage(idx)}
-                                >
-                                    Remove image
-                                </button>
+                                <div className="image-actions-row">
+                                    {mode === "flashcard" && (
+                                        <>
+                                            <div>
+                                                <p
+                                                    className="muted small"
+                                                    style={{
+                                                        marginBottom: "0.3rem",
+                                                    }}
+                                                >
+                                                    Which side shows the image?
+                                                </p>
+                                                <div
+                                                    className="option-row"
+                                                    style={{ gap: "0.4rem" }}
+                                                >
+                                                    <button
+                                                        className={`option-btn option-btn-sm ${item.imagePosition === "front" ? "active" : ""}`}
+                                                        onClick={() =>
+                                                            setImagePosition(
+                                                                idx,
+                                                                "front",
+                                                            )
+                                                        }
+                                                    >
+                                                        Front
+                                                    </button>
+                                                    <button
+                                                        className={`option-btn option-btn-sm ${item.imagePosition === "back" ? "active" : ""}`}
+                                                        onClick={() =>
+                                                            setImagePosition(
+                                                                idx,
+                                                                "back",
+                                                            )
+                                                        }
+                                                    >
+                                                        Back
+                                                    </button>
+                                                </div>
+                                            </div>
+                                            <div>
+                                                <p
+                                                    className="muted small"
+                                                    style={{
+                                                        marginBottom: "0.3rem",
+                                                    }}
+                                                >
+                                                    What shows on that side?
+                                                </p>
+                                                <div
+                                                    className="option-row"
+                                                    style={{ gap: "0.4rem" }}
+                                                >
+                                                    <button
+                                                        className={`option-btn option-btn-sm ${item.frontDisplay === "text" ? "active" : ""}`}
+                                                        onClick={() =>
+                                                            setFrontDisplay(
+                                                                idx,
+                                                                "text",
+                                                            )
+                                                        }
+                                                    >
+                                                        Text Only
+                                                    </button>
+                                                    <button
+                                                        className={`option-btn option-btn-sm ${item.frontDisplay === "image" ? "active" : ""}`}
+                                                        onClick={() =>
+                                                            setFrontDisplay(
+                                                                idx,
+                                                                "image",
+                                                            )
+                                                        }
+                                                    >
+                                                        Image Only
+                                                    </button>
+                                                    <button
+                                                        className={`option-btn option-btn-sm ${item.frontDisplay === "both" ? "active" : ""}`}
+                                                        onClick={() =>
+                                                            setFrontDisplay(
+                                                                idx,
+                                                                "both",
+                                                            )
+                                                        }
+                                                    >
+                                                        Both
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    )}
+                                    <button
+                                        className="btn-text danger"
+                                        onClick={() => removeImage(idx)}
+                                    >
+                                        Remove image
+                                    </button>
+                                </div>
                             </div>
                         ) : (
                             <input
@@ -279,12 +391,29 @@ export default function CreateQuiz() {
                         {uploadingIdx === idx && (
                             <p className="muted small">Uploading…</p>
                         )}
+                        {mode === "mcq" && item.imageUrl && (
+                            <p
+                                className="muted small"
+                                style={{ marginTop: "0.4rem" }}
+                            >
+                                This image will display below the question,
+                                above the choices.
+                            </p>
+                        )}
                     </div>
 
                     {mode === "flashcard" ? (
                         <>
                             <div className="field">
-                                <label>Front</label>
+                                <label>
+                                    Front{" "}
+                                    {item.imageUrl &&
+                                        item.imagePosition === "front" && (
+                                            <span className="muted small">
+                                                (image shows here too)
+                                            </span>
+                                        )}
+                                </label>
                                 <input
                                     value={item.front}
                                     onChange={(e) =>
@@ -297,7 +426,15 @@ export default function CreateQuiz() {
                                 />
                             </div>
                             <div className="field">
-                                <label>Back</label>
+                                <label>
+                                    Back{" "}
+                                    {item.imageUrl &&
+                                        item.imagePosition === "back" && (
+                                            <span className="muted small">
+                                                (image shows here too)
+                                            </span>
+                                        )}
+                                </label>
                                 <input
                                     value={item.back}
                                     onChange={(e) =>
@@ -413,8 +550,8 @@ export default function CreateQuiz() {
                             className="muted"
                             style={{ marginBottom: "1.25rem" }}
                         >
-                            Your current progress will not be saved and you
-                            can't continue it later.
+                            Your current attempt will not be saved and you can't
+                            continue it later.
                         </p>
                         <div className="nav-row centered">
                             <button

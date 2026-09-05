@@ -1,5 +1,12 @@
 import { useState } from "react";
 
+const MCQ_PRESETS = [25, 50, 100, 150];
+const FLASHCARD_PRESETS = [5, 10, 20, 30];
+const MCQ_MIN = 10,
+    MCQ_MAX = 150;
+const FLASHCARD_MIN = 5,
+    FLASHCARD_MAX = 50;
+
 export default function SetupStep({
     fileName,
     defaultTitle,
@@ -8,15 +15,38 @@ export default function SetupStep({
 }) {
     const [mode, setMode] = useState("flashcard");
     const [count, setCount] = useState(10);
+    const [customCount, setCustomCount] = useState("");
+    const [useCustom, setUseCustom] = useState(false);
     const [title, setTitle] = useState(defaultTitle);
-    const [sourceMode, setSourceMode] = useState("ai"); // 'ai' | 'extract'
+    const [sourceMode, setSourceMode] = useState("ai");
 
-    const flashcardCounts = [10, 15, 20];
-    const mcqCounts = [50, 100, 150];
+    const min = mode === "flashcard" ? FLASHCARD_MIN : MCQ_MIN;
+    const max = mode === "flashcard" ? FLASHCARD_MAX : MCQ_MAX;
+    const presets = mode === "flashcard" ? FLASHCARD_PRESETS : MCQ_PRESETS;
 
     function selectMode(m) {
         setMode(m);
+        setUseCustom(false);
         setCount(m === "flashcard" ? 10 : 50);
+        setCustomCount("");
+    }
+
+    function selectPreset(p) {
+        setUseCustom(false);
+        setCount(p);
+    }
+
+    function handleCustomChange(value) {
+        setCustomCount(value);
+        const n = Number(value);
+        if (!isNaN(n)) setCount(Math.min(max, Math.max(min, n)));
+    }
+
+    function handleCustomBlur() {
+        if (customCount === "") return;
+        const n = Math.min(max, Math.max(min, Number(customCount) || min));
+        setCustomCount(String(n));
+        setCount(n);
     }
 
     return (
@@ -70,29 +100,54 @@ export default function SetupStep({
                 </div>
                 <p className="muted small" style={{ marginTop: "0.5rem" }}>
                     {sourceMode === "ai"
-                        ? "The AI writes new questions based on the content. Best for notes, articles, or textbook chapters."
-                        : "Directly extracts existing questions & choices already in the PDF (e.g. a past exam or worksheet). Won't invent new ones — if the PDF has fewer questions than your chosen count, you'll get however many actually exist."}
+                        ? "The AI writes new questions based on the content."
+                        : "Extracts existing questions already in the PDF (e.g. a past exam)."}
                 </p>
             </div>
 
             <div className="option-group">
                 <label>
                     Number of{" "}
-                    {mode === "flashcard" ? "flashcards" : "questions"}
+                    {mode === "flashcard" ? "flashcards" : "questions"} ({min}–
+                    {max})
                 </label>
                 <div className="option-row centered">
-                    {(mode === "flashcard" ? flashcardCounts : mcqCounts).map(
-                        (c) => (
-                            <button
-                                key={c}
-                                className={`option-btn ${count === c ? "active" : ""}`}
-                                onClick={() => setCount(c)}
-                            >
-                                {c}
-                            </button>
-                        ),
-                    )}
+                    {presets.map((p) => (
+                        <button
+                            key={p}
+                            className={`option-btn ${!useCustom && count === p ? "active" : ""}`}
+                            onClick={() => selectPreset(p)}
+                        >
+                            {p}
+                        </button>
+                    ))}
+                    <button
+                        className={`option-btn ${useCustom ? "active" : ""}`}
+                        onClick={() => setUseCustom(true)}
+                    >
+                        Custom
+                    </button>
                 </div>
+                {useCustom && (
+                    <div className="custom-count-center">
+                        <input
+                            type="number"
+                            min={min}
+                            max={max}
+                            placeholder={`${min}-${max}`}
+                            value={customCount}
+                            onChange={(e) => handleCustomChange(e.target.value)}
+                            onBlur={handleCustomBlur}
+                            className="custom-timer-input"
+                        />
+                    </div>
+                )}
+                {!useCustom && (
+                    <p
+                        className="muted small"
+                        style={{ marginTop: "0.4rem" }}
+                    ></p>
+                )}
             </div>
 
             <div className="nav-row centered">

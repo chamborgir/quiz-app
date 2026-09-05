@@ -4,15 +4,17 @@ import { useAuth } from "../context/AuthContext.jsx";
 import { saveQuiz } from "../lib/quizApi.js";
 import UploadStep from "../components/UploadStep.jsx";
 import SetupStep from "../components/SetupStep.jsx";
+import PasteTextModal from "../components/PasteTextModal.jsx";
 
 export default function Home({ setActiveQuiz }) {
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [step, setStep] = useState("upload"); // upload | setup | loading
+    const [step, setStep] = useState("upload");
     const [pdfText, setPdfText] = useState("");
     const [fileName, setFileName] = useState("");
     const [error, setError] = useState("");
     const [progress, setProgress] = useState(0);
+    const [showPasteModal, setShowPasteModal] = useState(false);
 
     const intervalRef = useRef(null);
     const startTimeRef = useRef(null);
@@ -20,7 +22,6 @@ export default function Home({ setActiveQuiz }) {
 
     function estimateDuration(mode, count) {
         if (mode === "flashcard") return 8000 + count * 250;
-        // mcq: batches + verification pass, both scale with count
         return 12000 + (count / 50) * 16000;
     }
 
@@ -55,6 +56,11 @@ export default function Home({ setActiveQuiz }) {
         setError("");
     }
 
+    function handlePasteGenerate(text) {
+        setShowPasteModal(false);
+        handleExtracted(text, "Pasted Text");
+    }
+
     async function handleGenerate(mode, count, title, sourceMode) {
         setStep("loading");
         setError("");
@@ -77,14 +83,16 @@ export default function Home({ setActiveQuiz }) {
                 data = rawBody ? JSON.parse(rawBody) : {};
             } catch {
                 throw new Error(
-                    `Server returned an invalid response (status ${res.status}). Try a smaller count or check the server logs.`,
+                    `Server returned an invalid response (status ${res.status}). Try a smaller count.`,
                 );
             }
 
-            if (!res.ok)
+            if (!res.ok) {
+                console.error("Server error details:", data.debug);
                 throw new Error(
                     data.error || `Request failed (status ${res.status})`,
                 );
+            }
             if (!data.questions || data.questions.length === 0)
                 throw new Error("No questions were generated.");
 
@@ -127,10 +135,10 @@ export default function Home({ setActiveQuiz }) {
     return (
         <div className="page">
             <div className="hero">
-                <h1>Turn any PDF into flashcards or a quiz</h1>
+                <h1>Turn any Text into flashcards or a quiz</h1>
                 <p className="muted">
-                    Upload notes, a chapter, or an article — get a study set in
-                    seconds.
+                    Upload PDFs, notes, a chapter, or an article and get a study
+                    set in seconds.
                 </p>
             </div>
 
@@ -138,7 +146,27 @@ export default function Home({ setActiveQuiz }) {
 
             {step === "upload" && (
                 <>
-                    <UploadStep onExtracted={handleExtracted} />
+                    <div className="dual-input-row">
+                        <div className="dual-input-col">
+                            <UploadStep onExtracted={handleExtracted} />
+                        </div>
+                        <div className="dual-input-col">
+                            <div className="card paste-text-outer">
+                                <button
+                                    className="paste-text-card"
+                                    onClick={() => setShowPasteModal(true)}
+                                >
+                                    <span className="paste-text-icon">📋</span>
+                                    <span className="paste-text-label">
+                                        Paste Text Directly
+                                    </span>
+                                    <span className="paste-text-sub">
+                                        Skip the PDF — paste notes or an article
+                                    </span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
 
                     <div className="or-divider">
                         <span>or</span>
@@ -195,6 +223,13 @@ export default function Home({ setActiveQuiz }) {
                         Larger sets take longer — this can run up to a minute.
                     </p>
                 </div>
+            )}
+
+            {showPasteModal && (
+                <PasteTextModal
+                    onClose={() => setShowPasteModal(false)}
+                    onGenerate={handlePasteGenerate}
+                />
             )}
         </div>
     );
