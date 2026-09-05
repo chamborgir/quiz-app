@@ -9,14 +9,32 @@ export default function Flashcards({ questions, onFinish }) {
     const current = questions[index];
     const isLast = index === questions.length - 1;
 
+    const showImageOnFront =
+        !!current.imageUrl &&
+        current.imagePosition !== "back" &&
+        current.frontDisplay !== "text";
+    const showTextOnFront =
+        !current.imageUrl ||
+        current.imagePosition === "back" ||
+        current.frontDisplay !== "image";
+
+    const showImageOnBack =
+        !!current.imageUrl &&
+        current.imagePosition === "back" &&
+        current.frontDisplay !== "text";
+    const showTextOnBack =
+        !current.imageUrl ||
+        current.imagePosition !== "back" ||
+        current.frontDisplay !== "image";
+
     function goTo(action) {
         if (transitioning) return;
         setTransitioning(true);
-        setFlipped(false); // always flip back to front before switching content
+        setFlipped(false);
         setTimeout(() => {
             action();
             setTransitioning(false);
-        }, 500); // matches the CSS flip duration — hides the next card's answer until fully reset
+        }, 500);
     }
 
     function next() {
@@ -42,34 +60,26 @@ export default function Flashcards({ questions, onFinish }) {
             >
                 <div className="flashcard-inner">
                     <div className="flashcard-face flashcard-front">
-                        {current.imageUrl &&
-                            current.imagePosition !== "back" &&
-                            current.frontDisplay !== "text" && (
-                                <img
-                                    src={current.imageUrl}
-                                    alt=""
-                                    className="quiz-image"
-                                />
-                            )}
-                        {(!current.imageUrl ||
-                            current.imagePosition === "back" ||
-                            current.frontDisplay !== "image") && (
+                        {showImageOnFront && (
+                            <img
+                                src={current.imageUrl}
+                                alt=""
+                                className="quiz-image"
+                            />
+                        )}
+                        {showTextOnFront && (
                             <FormattedText text={current.front} />
                         )}
                     </div>
                     <div className="flashcard-face flashcard-back">
-                        {current.imageUrl &&
-                            current.imagePosition === "back" &&
-                            current.frontDisplay !== "text" && (
-                                <img
-                                    src={current.imageUrl}
-                                    alt=""
-                                    className="quiz-image"
-                                />
-                            )}
-                        {(!current.imageUrl ||
-                            current.imagePosition !== "back" ||
-                            current.frontDisplay !== "image") && (
+                        {showImageOnBack && (
+                            <img
+                                src={current.imageUrl}
+                                alt=""
+                                className="quiz-image"
+                            />
+                        )}
+                        {showTextOnBack && (
                             <FormattedText text={current.back} />
                         )}
                     </div>

@@ -25,7 +25,7 @@ function normalizeItem(mode, item) {
             back: item.back || "",
             imageUrl: item.imageUrl || "",
             imagePosition: item.imagePosition || "front",
-            frontDisplay: item.frontDisplay || "text",
+            frontDisplay: item.frontDisplay || "both",
         };
     }
     return {
@@ -205,6 +205,14 @@ export default function EditQuiz() {
         );
     }
 
+    function setFrontDisplay(idx, display) {
+        setItems((prev) =>
+            prev.map((it, i) =>
+                i === idx ? { ...it, frontDisplay: display } : it,
+            ),
+        );
+    }
+
     function validate() {
         if (!title.trim()) return "Please give your quiz a title.";
         if (items.length === 0) return "Add at least one item.";
@@ -312,65 +320,100 @@ export default function EditQuiz() {
                                     src={item.imageUrl}
                                     alt="Question visual"
                                 />
-                                <div className="image-actions-row">
-                                    {mode === "flashcard" && (
-                                        <div
-                                            className="option-row"
-                                            style={{ gap: "0.4rem" }}
-                                        >
-                                            <button
-                                                className={`option-btn option-btn-sm ${item.imagePosition === "front" ? "active" : ""}`}
-                                                onClick={() =>
-                                                    setImagePosition(
-                                                        idx,
-                                                        "front",
-                                                    )
-                                                }
+
+                                {mode === "flashcard" && (
+                                    <>
+                                        <div className="image-control-group">
+                                            <p className="muted small">
+                                                Which side shows the image?
+                                            </p>
+                                            <div
+                                                className="option-row"
+                                                style={{ gap: "0.4rem" }}
                                             >
-                                                Show on Front
-                                            </button>
-                                            <button
-                                                className={`option-btn option-btn-sm ${item.imagePosition === "back" ? "active" : ""}`}
-                                                onClick={() =>
-                                                    setImagePosition(
-                                                        idx,
-                                                        "back",
-                                                    )
-                                                }
-                                            >
-                                                Show on Back
-                                            </button>
+                                                <button
+                                                    type="button"
+                                                    className={`option-btn option-btn-sm ${item.imagePosition === "front" ? "active" : ""}`}
+                                                    onClick={() =>
+                                                        setImagePosition(
+                                                            idx,
+                                                            "front",
+                                                        )
+                                                    }
+                                                >
+                                                    Front
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`option-btn option-btn-sm ${item.imagePosition === "back" ? "active" : ""}`}
+                                                    onClick={() =>
+                                                        setImagePosition(
+                                                            idx,
+                                                            "back",
+                                                        )
+                                                    }
+                                                >
+                                                    Back
+                                                </button>
+                                            </div>
                                         </div>
-                                    )}
-                                    <div
-                                        className="nav-row"
-                                        style={{ gap: "0.6rem" }}
-                                    >
-                                        <label
-                                            className="btn-text"
-                                            style={{ cursor: "pointer" }}
-                                        >
-                                            Replace image
-                                            <input
-                                                type="file"
-                                                accept="image/*"
-                                                style={{ display: "none" }}
-                                                onChange={(e) =>
-                                                    handleImageUpload(
-                                                        idx,
-                                                        e.target.files[0],
-                                                    )
-                                                }
-                                            />
-                                        </label>
-                                        <button
-                                            className="btn-text danger"
-                                            onClick={() => removeImage(idx)}
-                                        >
-                                            Remove image
-                                        </button>
-                                    </div>
-                                </div>
+
+                                        <div className="image-control-group">
+                                            <p className="muted small">
+                                                What shows on that side?
+                                            </p>
+                                            <div
+                                                className="option-row"
+                                                style={{ gap: "0.4rem" }}
+                                            >
+                                                <button
+                                                    type="button"
+                                                    className={`option-btn option-btn-sm ${item.frontDisplay === "text" ? "active" : ""}`}
+                                                    onClick={() =>
+                                                        setFrontDisplay(
+                                                            idx,
+                                                            "text",
+                                                        )
+                                                    }
+                                                >
+                                                    Text Only
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`option-btn option-btn-sm ${item.frontDisplay === "image" ? "active" : ""}`}
+                                                    onClick={() =>
+                                                        setFrontDisplay(
+                                                            idx,
+                                                            "image",
+                                                        )
+                                                    }
+                                                >
+                                                    Image Only
+                                                </button>
+                                                <button
+                                                    type="button"
+                                                    className={`option-btn option-btn-sm ${item.frontDisplay === "both" ? "active" : ""}`}
+                                                    onClick={() =>
+                                                        setFrontDisplay(
+                                                            idx,
+                                                            "both",
+                                                        )
+                                                    }
+                                                >
+                                                    Both
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </>
+                                )}
+
+                                <button
+                                    type="button"
+                                    className="remove-image-btn"
+                                    onClick={() => removeImage(idx)}
+                                >
+                                    🗑 Remove image
+                                </button>
                             </div>
                         ) : (
                             <input

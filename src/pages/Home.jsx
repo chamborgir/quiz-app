@@ -135,9 +135,9 @@ export default function Home({ setActiveQuiz }) {
     return (
         <div className="page">
             <div className="hero">
-                <h1>Turn any Text into flashcards or a quiz</h1>
+                <h1>Turn any text into flashcards or a quiz</h1>
                 <p className="muted">
-                    Upload PDFs, notes, a chapter, or an article and get a study
+                    Upload PDFs, MSWord documents, notes, a chapter, or an article and get a study
                     set in seconds.
                 </p>
             </div>
@@ -161,7 +161,7 @@ export default function Home({ setActiveQuiz }) {
                                         Paste Text Directly
                                     </span>
                                     <span className="paste-text-sub">
-                                        Skip the PDF — paste notes or an article
+                                        Skip uploads — paste notes or an article
                                     </span>
                                 </button>
                             </div>

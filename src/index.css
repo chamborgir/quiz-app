@@ -448,11 +448,16 @@ body {
   padding: 0.6rem 1.1rem;
   border-radius: 9px;
   border: 1px solid var(--border);
-  background: var(--bg);
+  background: var(--surface);
   color: var(--text);
   cursor: pointer;
   font-weight: 600;
   font-size: 0.9rem;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.option-btn:hover {
+  border-color: var(--accent);
 }
 
 .option-btn.active {
@@ -1318,6 +1323,8 @@ body {
   font-size: 0.78rem;
 }
 
+
+
 .item-image-preview img {
   max-width: 100%;
   max-height: 220px;
@@ -1479,4 +1486,127 @@ body {
   width: 160px;
   font-size: 0.7rem;
   color: var(--text-muted);
+}
+
+
+.sort-buttons-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.4rem;
+  margin-bottom: 1.25rem;
+}
+
+.sort-btn {
+  padding: 0.5rem 0.3rem;
+  font-size: 0.8rem;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 420px) {
+  .sort-btn {
+    font-size: 0.7rem;
+    padding: 0.45rem 0.15rem;
+  }
+}
+
+.custom-input-center {
+  display: flex;
+  justify-content: center;
+  margin-top: 0.6rem;
+}
+
+.custom-input-center input[type='number'] {
+  width: 140px;
+  text-align: center;
+}
+
+
+
+.item-image-preview {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.item-image-preview img {
+  max-width: 100%;
+  max-height: 220px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  display: block;
+  position: relative;
+  z-index: 1;
+}
+
+.image-controls-row {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.image-controls-row .image-control-group {
+  flex-shrink: 0;
+}
+
+.remove-image-btn {
+  align-self: center;
+  background: var(--error-bg);
+  color: var(--error);
+  border: 1px solid var(--error);
+  border-radius: 8px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.remove-image-btn:hover {
+  opacity: 0.85;
+}
+
+@media (max-width: 480px) {
+  .image-controls-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .remove-image-btn {
+    align-self: flex-start;
+  }
+}
+
+.image-control-group {
+  position: relative;
+  z-index: 2; /* ensures these sit above the image, never visually blocked by it */
+}
+
+.image-control-group p {
+  margin: 0 0 0.3rem;
+}
+
+.option-btn-sm {
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.remove-image-btn {
+  align-self: flex-start;
+  background: var(--error-bg);
+  color: var(--error);
+  border: 1px solid var(--error);
+  border-radius: 8px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.remove-image-btn:hover {
+  opacity: 0.85;
 }

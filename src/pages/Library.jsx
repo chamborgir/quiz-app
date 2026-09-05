@@ -14,6 +14,8 @@ import {
     renameCollection,
     deleteCollection,
     touchQuizAccess,
+    shareCollection,
+    unshareCollection,
 } from "../lib/quizApi.js";
 
 const PAGE_SIZE = 10;
@@ -22,7 +24,7 @@ export default function Library({ setActiveQuiz }) {
     const { user } = useAuth();
     const navigate = useNavigate();
 
-    const [tab, setTab] = useState("all"); // all | groups
+    const [tab, setTab] = useState("all");
     const [quizzes, setQuizzes] = useState([]);
     const [collections, setCollections] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -42,9 +44,9 @@ export default function Library({ setActiveQuiz }) {
     const [creatingCollection, setCreatingCollection] = useState(false);
     const [editingCollectionId, setEditingCollectionId] = useState(null);
     const [editCollectionValue, setEditCollectionValue] = useState("");
+    const [collectionShareLinks, setCollectionShareLinks] = useState({});
 
-    // Add-to-group modal
-    const [groupModalQuiz, setGroupModalQuiz] = useState(null); // the quiz object, or null if closed
+    const [groupModalQuiz, setGroupModalQuiz] = useState(null);
     const [newGroupInline, setNewGroupInline] = useState("");
     const [creatingInlineGroup, setCreatingInlineGroup] = useState(false);
 
@@ -86,7 +88,7 @@ export default function Library({ setActiveQuiz }) {
     }
 
     function startPlay(quiz) {
-        touchQuizAccess(quiz.id); // fire-and-forget, don't block navigation on it
+        touchQuizAccess(quiz.id);
         setActiveQuiz({
             mode: quiz.mode,
             questions: quiz.questions,
@@ -220,44 +222,73 @@ export default function Library({ setActiveQuiz }) {
         }
     }
 
-    function startEditCollection(col) {
-        setEditingCollectionId(col.id);
-        setEditCollectionValue(col.name);
+    function startEditCollection(collection) {
+        setEditingCollectionId(collection.id);
+        setEditCollectionValue(collection.name);
     }
 
-    async function saveEditCollection(colId) {
+    async function saveEditCollection(collectionId) {
         const name = editCollectionValue.trim();
         if (name) {
-            await renameCollection(colId, name);
+            await renameCollection(collectionId, name);
             setCollections((prev) =>
-                prev.map((c) => (c.id === colId ? { ...c, name } : c)),
+                prev.map((c) => (c.id === collectionId ? { ...c, name } : c)),
             );
         }
         setEditingCollectionId(null);
     }
 
-    async function handleDeleteCollection(colId) {
+    async function handleDeleteCollection(collectionId) {
         if (
             !confirm(
                 "Delete this group? Quizzes inside it will not be deleted, just un-grouped.",
             )
         )
             return;
-        await deleteCollection(colId);
-        setCollections((prev) => prev.filter((c) => c.id !== colId));
+        await deleteCollection(collectionId);
+        setCollections((prev) => prev.filter((c) => c.id !== collectionId));
         setQuizzes((prev) =>
             prev.map((q) =>
-                q.collection_id === colId ? { ...q, collection_id: null } : q,
+                q.collection_id === collectionId
+                    ? { ...q, collection_id: null }
+                    : q,
             ),
         );
-        if (collectionFilter === colId) {
+        if (collectionFilter === collectionId) {
             setCollectionFilter(null);
             setTab("all");
         }
     }
 
-    function viewCollection(colId) {
-        setCollectionFilter(colId);
+    async function handleShareCollection(collection) {
+        const code = await shareCollection(
+            collection.id,
+            collection.share_code,
+        );
+        const link = `${window.location.origin}/shared-group/${code}`;
+        setCollectionShareLinks((prev) => ({ ...prev, [collection.id]: link }));
+        setCollections((prev) =>
+            prev.map((c) =>
+                c.id === collection.id
+                    ? { ...c, is_public: true, share_code: code }
+                    : c,
+            ),
+        );
+        await navigator.clipboard.writeText(link).catch(() => {});
+    }
+
+    async function handleUnshareCollection(collection) {
+        await unshareCollection(collection.id);
+        setCollections((prev) =>
+            prev.map((c) =>
+                c.id === collection.id ? { ...c, is_public: false } : c,
+            ),
+        );
+        setCollectionShareLinks((prev) => ({ ...prev, [collection.id]: "" }));
+    }
+
+    function viewCollection(collectionId) {
+        setCollectionFilter(collectionId);
         setTab("all");
         setPage(1);
     }
@@ -293,7 +324,7 @@ export default function Library({ setActiveQuiz }) {
                 const bTime = b.last_accessed_at
                     ? new Date(b.last_accessed_at).getTime()
                     : 0;
-                return bTime - aTime; // most recently accessed first; never-accessed quizzes sink to the bottom
+                return bTime - aTime;
             });
         }
         return list;
@@ -357,34 +388,31 @@ export default function Library({ setActiveQuiz }) {
                         </div>
                     )}
 
-                    <div className="sort-row">
-                        <span className="muted small">Sort by:</span>
-                        <div className="option-row centered">
-                            <button
-                                className={`option-btn ${sortBy === "date_desc" ? "active" : ""}`}
-                                onClick={() => changeSort("date_desc")}
-                            >
-                                Newest
-                            </button>
-                            <button
-                                className={`option-btn ${sortBy === "date_asc" ? "active" : ""}`}
-                                onClick={() => changeSort("date_asc")}
-                            >
-                                Oldest
-                            </button>
-                            <button
-                                className={`option-btn ${sortBy === "type" ? "active" : ""}`}
-                                onClick={() => changeSort("type")}
-                            >
-                                Type
-                            </button>
-                            <button
-                                className={`option-btn ${sortBy === "recent" ? "active" : ""}`}
-                                onClick={() => changeSort("recent")}
-                            >
-                                Recent
-                            </button>
-                        </div>
+                    <div className="sort-buttons-row">
+                        <button
+                            className={`option-btn sort-btn ${sortBy === "date_desc" ? "active" : ""}`}
+                            onClick={() => changeSort("date_desc")}
+                        >
+                            Newest
+                        </button>
+                        <button
+                            className={`option-btn sort-btn ${sortBy === "date_asc" ? "active" : ""}`}
+                            onClick={() => changeSort("date_asc")}
+                        >
+                            Oldest
+                        </button>
+                        <button
+                            className={`option-btn sort-btn ${sortBy === "type" ? "active" : ""}`}
+                            onClick={() => changeSort("type")}
+                        >
+                            Type
+                        </button>
+                        <button
+                            className={`option-btn sort-btn ${sortBy === "recent" ? "active" : ""}`}
+                            onClick={() => changeSort("recent")}
+                        >
+                            Recent
+                        </button>
                     </div>
 
                     {filteredSorted.length === 0 && (
@@ -441,16 +469,6 @@ export default function Library({ setActiveQuiz }) {
                                         {openMenuId === quiz.id && (
                                             <div className="quiz-menu">
                                                 <button
-                                                    className="btn-text"
-                                                    onClick={() =>
-                                                        openGroupModal(quiz)
-                                                    }
-                                                >
-                                                    {quiz.collection_id
-                                                        ? "Change Group"
-                                                        : "Add to Group"}
-                                                </button>
-                                                <button
                                                     onClick={() => {
                                                         setOpenMenuId(null);
                                                         navigate(
@@ -466,6 +484,16 @@ export default function Library({ setActiveQuiz }) {
                                                     }
                                                 >
                                                     Rename
+                                                </button>
+                                                <button
+                                                    onClick={() => {
+                                                        setOpenMenuId(null);
+                                                        openGroupModal(quiz);
+                                                    }}
+                                                >
+                                                    {quiz.collection_id
+                                                        ? "Change Group"
+                                                        : "Add to Group"}
                                                 </button>
                                                 {quiz.is_public ? (
                                                     <button
@@ -631,7 +659,7 @@ export default function Library({ setActiveQuiz }) {
                                     e.key === "Enter" &&
                                     handleCreateCollection()
                                 }
-                                placeholder="e.g. ProfEd Review"
+                                placeholder="e.g. Midterm Review"
                             />
                         </div>
                         <div className="nav-row centered">
@@ -657,14 +685,17 @@ export default function Library({ setActiveQuiz }) {
                         </p>
                     )}
 
-                    {collections.map((col) => {
+                    {collections.map((collection) => {
                         const quizCount = quizzes.filter(
-                            (q) => q.collection_id === col.id,
+                            (q) => q.collection_id === collection.id,
                         ).length;
                         return (
-                            <div key={col.id} className="card library-item">
+                            <div
+                                key={collection.id}
+                                className="card library-item"
+                            >
                                 <div className="library-header">
-                                    {editingCollectionId === col.id ? (
+                                    {editingCollectionId === collection.id ? (
                                         <input
                                             className="inline-input"
                                             value={editCollectionValue}
@@ -675,33 +706,42 @@ export default function Library({ setActiveQuiz }) {
                                             }
                                             onKeyDown={(e) =>
                                                 e.key === "Enter" &&
-                                                saveEditCollection(col.id)
+                                                saveEditCollection(
+                                                    collection.id,
+                                                )
                                             }
                                             onBlur={() =>
-                                                saveEditCollection(col.id)
+                                                saveEditCollection(
+                                                    collection.id,
+                                                )
                                             }
                                             autoFocus
                                         />
                                     ) : (
-                                        <h3>{col.name}</h3>
+                                        <h3>{collection.name}</h3>
                                     )}
                                     <span className="badge">
                                         {quizCount} quiz
                                         {quizCount === 1 ? "" : "zes"}
                                     </span>
                                 </div>
+
                                 <div className="library-actions">
                                     <button
                                         className="btn btn-sm"
-                                        onClick={() => viewCollection(col.id)}
+                                        onClick={() =>
+                                            viewCollection(collection.id)
+                                        }
                                     >
                                         View Quizzes
                                     </button>
-                                    {editingCollectionId === col.id ? (
+                                    {editingCollectionId === collection.id ? (
                                         <button
                                             className="btn-text"
                                             onClick={() =>
-                                                saveEditCollection(col.id)
+                                                saveEditCollection(
+                                                    collection.id,
+                                                )
                                             }
                                         >
                                             Save name
@@ -710,21 +750,63 @@ export default function Library({ setActiveQuiz }) {
                                         <button
                                             className="btn-text"
                                             onClick={() =>
-                                                startEditCollection(col)
+                                                startEditCollection(collection)
                                             }
                                         >
                                             Rename
                                         </button>
                                     )}
+                                    {collection.is_public ? (
+                                        <button
+                                            className="btn-text"
+                                            onClick={() =>
+                                                handleUnshareCollection(
+                                                    collection,
+                                                )
+                                            }
+                                        >
+                                            Unshare
+                                        </button>
+                                    ) : (
+                                        <button
+                                            className="btn-text"
+                                            onClick={() =>
+                                                handleShareCollection(
+                                                    collection,
+                                                )
+                                            }
+                                        >
+                                            Share Group
+                                        </button>
+                                    )}
                                     <button
                                         className="btn-text danger"
                                         onClick={() =>
-                                            handleDeleteCollection(col.id)
+                                            handleDeleteCollection(
+                                                collection.id,
+                                            )
                                         }
                                     >
                                         Delete
                                     </button>
                                 </div>
+
+                                {collectionShareLinks[collection.id] && (
+                                    <div className="share-link-box">
+                                        <input
+                                            readOnly
+                                            value={
+                                                collectionShareLinks[
+                                                    collection.id
+                                                ]
+                                            }
+                                            onFocus={(e) => e.target.select()}
+                                        />
+                                        <span className="copied-tag">
+                                            Link copied
+                                        </span>
+                                    </div>
+                                )}
                             </div>
                         );
                     })}

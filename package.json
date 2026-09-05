@@ -14,7 +14,8 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.2",
     "pdfjs-dist": "3.11.174",
-    "katex": "^0.16.9"
+    "katex": "^0.16.9",
+    "mammoth": "^1.7.0"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",

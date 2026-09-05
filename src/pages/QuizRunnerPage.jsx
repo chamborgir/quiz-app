@@ -71,14 +71,16 @@ function McqOptions({ onStart }) {
                     </button>
                 </div>
                 {timerChoice === "Custom" && (
-                    <input
-                        type="number"
-                        min="1"
-                        placeholder="Minutes"
-                        value={customMinutes}
-                        onChange={(e) => setCustomMinutes(e.target.value)}
-                        className="custom-timer-input"
-                    />
+                    <div className="custom-input-center">
+                        <input
+                            type="number"
+                            min="1"
+                            placeholder="Minutes"
+                            value={customMinutes}
+                            onChange={(e) => setCustomMinutes(e.target.value)}
+                            className="custom-timer-input"
+                        />
+                    </div>
                 )}
             </div>
 
@@ -105,7 +107,10 @@ function McqOptions({ onStart }) {
                     </button>
                 </div>
                 {passRateMode === "slider" && (
-                    <div className="pass-slider-wrap">
+                    <div
+                        className="pass-slider-wrap custom-input-center"
+                        style={{ flexDirection: "column" }}
+                    >
                         <div className="pass-slider-value">{passRate}%</div>
                         <input
                             type="range"

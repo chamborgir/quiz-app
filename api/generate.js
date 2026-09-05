@@ -235,7 +235,11 @@ export default async function handler(req, res) {
             }
         }
 
-        await runBatches(buildSizeList(targetCount));
+        const bufferedInitialCount = Math.min(
+            150,
+            Math.ceil(targetCount * 1.2),
+        ); // request ~20% extra to offset items lost to validity/dedup filtering
+        await runBatches(buildSizeList(bufferedInitialCount));
 
         const maxTopups =
             sourceMode === "extract"

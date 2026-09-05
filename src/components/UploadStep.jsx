@@ -1,5 +1,9 @@
 import { useState } from "react";
 import { extractTextFromPdf } from "../utils/pdf.js";
+import { extractTextFromDocx } from "../utils/docx.js";
+
+const DOCX_MIME =
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 
 export default function UploadStep({ onExtracted }) {
     const [fileName, setFileName] = useState("");
@@ -7,18 +11,28 @@ export default function UploadStep({ onExtracted }) {
     const [error, setError] = useState("");
 
     async function handleFile(file) {
-        if (!file || file.type !== "application/pdf") {
-            setError("Please upload a valid PDF file.");
+        if (!file) return;
+
+        const isPdf = file.type === "application/pdf";
+        const isDocx =
+            file.type === DOCX_MIME ||
+            file.name.toLowerCase().endsWith(".docx");
+
+        if (!isPdf && !isDocx) {
+            setError("Please upload a PDF or Word (.docx) file.");
             return;
         }
+
         setError("");
         setFileName(file.name);
         setExtracting(true);
         try {
-            const text = await extractTextFromPdf(file);
+            const text = isPdf
+                ? await extractTextFromPdf(file)
+                : await extractTextFromDocx(file);
             if (!text || text.length < 50) {
                 setError(
-                    "Could not extract enough text from this PDF. Try another file.",
+                    "Could not extract enough text from this file. Try another one.",
                 );
                 setExtracting(false);
                 return;
@@ -27,7 +41,7 @@ export default function UploadStep({ onExtracted }) {
             onExtracted(text, file.name);
         } catch (err) {
             console.error(err);
-            setError("Failed to read PDF. Please try a different file.");
+            setError("Failed to read this file. Please try a different one.");
             setExtracting(false);
         }
     }
@@ -44,16 +58,16 @@ export default function UploadStep({ onExtracted }) {
             >
                 <input
                     type="file"
-                    accept="application/pdf"
+                    accept="application/pdf,.pdf,.docx,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                     style={{ display: "none" }}
                     onChange={(e) => handleFile(e.target.files[0])}
                 />
                 <div style={{ fontSize: "2.5rem" }}>📄</div>
                 <p>
-                    <strong>Click to upload</strong> or drag & drop a PDF
+                    <strong>Click to upload</strong> or drag & drop
                 </p>
-                <p style={{ color: "#64748b", fontSize: "0.85rem" }}>
-                    Study notes, textbook chapters, articles, etc.
+                <p style={{ color: "var(--text-muted)", fontSize: "0.85rem" }}>
+                    PDF or Word (.docx) — notes, chapters, articles, etc.
                 </p>
                 {fileName && !extracting && (
                     <div className="file-name">✓ {fileName} loaded</div>

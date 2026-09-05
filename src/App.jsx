@@ -10,6 +10,7 @@ import Library from "./pages/Library.jsx";
 import SharedQuiz from "./pages/SharedQuiz.jsx";
 import CreateQuiz from "./pages/CreateQuiz.jsx";
 import EditQuiz from "./pages/EditQuiz.jsx";
+import SharedGroup from "./pages/SharedGroup.jsx";
 
 export default function App() {
     const [activeQuiz, setActiveQuiz] = useState(null);
@@ -57,8 +58,8 @@ export default function App() {
                     }
                 />
                 <Route
-                    path="/shared/:code"
-                    element={<SharedQuiz setActiveQuiz={setActiveQuiz} />}
+                    path="/shared-group/:code"
+                    element={<SharedGroup setActiveQuiz={setActiveQuiz} />}
                 />
             </Routes>
             <Footer />

@@ -201,3 +201,40 @@ export async function touchQuizAccess(quizId) {
         .eq("id", quizId);
     if (error) console.error("Failed to update last accessed:", error.message);
 }
+
+export async function shareCollection(collectionId, existingCode) {
+    const code = existingCode || generateShareCode();
+    const { error } = await supabase
+        .from("collections")
+        .update({ is_public: true, share_code: code })
+        .eq("id", collectionId);
+    if (error) throw error;
+    return code;
+}
+
+export async function unshareCollection(collectionId) {
+    const { error } = await supabase
+        .from("collections")
+        .update({ is_public: false })
+        .eq("id", collectionId);
+    if (error) throw error;
+}
+
+export async function getCollectionByShareCode(code) {
+    const { data: collection, error: colErr } = await supabase
+        .from("collections")
+        .select("*")
+        .eq("share_code", code)
+        .eq("is_public", true)
+        .single();
+    if (colErr) throw colErr;
+
+    const { data: quizzes, error: quizErr } = await supabase
+        .from("quizzes")
+        .select("*")
+        .eq("collection_id", collection.id)
+        .order("created_at", { ascending: false });
+    if (quizErr) throw quizErr;
+
+    return { collection, quizzes };
+}
