@@ -238,3 +238,21 @@ export async function getCollectionByShareCode(code) {
 
     return { collection, quizzes };
 }
+
+export async function cloneCollectionWithQuizzes(
+    collectionName,
+    quizzes,
+    userId,
+) {
+    const newCollection = await createCollection(userId, collectionName);
+    for (const quiz of quizzes) {
+        await saveQuiz({
+            userId,
+            title: quiz.title,
+            mode: quiz.mode,
+            questions: quiz.questions,
+            count: quiz.count,
+        }).then((saved) => assignQuizToCollection(saved.id, newCollection.id));
+    }
+    return newCollection;
+}

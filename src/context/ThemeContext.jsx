@@ -17,13 +17,9 @@ export const PALETTES = [
 export function ThemeProvider({ children }) {
     const { user } = useAuth();
 
-    const [mode, setMode] = useState(() => {
-        const saved = localStorage.getItem("theme_mode");
-        if (saved) return saved;
-        return window.matchMedia("(prefers-color-scheme: dark)").matches
-            ? "dark"
-            : "light";
-    });
+    const [mode, setMode] = useState(
+        () => localStorage.getItem("theme_mode") || "light",
+    );
 
     const [palette, setPaletteState] = useState(
         () => localStorage.getItem("theme_palette") || "cream",
