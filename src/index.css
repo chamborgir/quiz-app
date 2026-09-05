@@ -1610,3 +1610,40 @@ body {
 .remove-image-btn:hover {
   opacity: 0.85;
 }
+
+.group-actions-row {
+  padding-top: 1rem;
+  padding-bottom: 0.5rem;
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 0.4rem;
+}
+
+.group-actions-row .btn-sm,
+.group-actions-row .btn-text {
+  padding: 0.5rem 0.3rem;
+  font-size: 0.78rem;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-radius: 8px;
+}
+
+.group-actions-row .btn-text {
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.group-actions-row .btn-text.danger {
+  color: var(--error);
+  border-color: var(--error);
+}
+
+@media (max-width: 420px) {
+  .group-actions-row .btn-sm,
+  .group-actions-row .btn-text {
+    font-size: 0.68rem;
+    padding: 0.45rem 0.15rem;
+  }
+}

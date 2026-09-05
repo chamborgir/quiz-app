@@ -120,6 +120,7 @@ export default function Library({ setActiveQuiz }) {
         await deleteQuiz(quizId);
         setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
     }
+
     async function handleCopyShareLink(quiz) {
         setOpenMenuId(null);
         const code = await getOrCreateShareCode(quiz.id, quiz.share_code);
@@ -245,6 +246,7 @@ export default function Library({ setActiveQuiz }) {
             setTab("all");
         }
     }
+
     async function handleCopyGroupShareLink(collection) {
         const code = await getOrCreateCollectionShareCode(
             collection.id,
@@ -261,6 +263,7 @@ export default function Library({ setActiveQuiz }) {
         );
         await navigator.clipboard.writeText(link).catch(() => {});
     }
+
     function viewCollection(collectionId) {
         setCollectionFilter(collectionId);
         setTab("all");
@@ -692,14 +695,14 @@ export default function Library({ setActiveQuiz }) {
                                     </span>
                                 </div>
 
-                                <div className="library-actions">
+                                <div className="group-actions-row">
                                     <button
-                                        className="btn btn-sm"
+                                        className="btn-sm"
                                         onClick={() =>
                                             viewCollection(collection.id)
                                         }
                                     >
-                                        View Quizzes
+                                        View
                                     </button>
                                     {editingCollectionId === collection.id ? (
                                         <button
@@ -710,7 +713,7 @@ export default function Library({ setActiveQuiz }) {
                                                 )
                                             }
                                         >
-                                            Save name
+                                            Save
                                         </button>
                                     ) : (
                                         <button
@@ -728,7 +731,7 @@ export default function Library({ setActiveQuiz }) {
                                             handleCopyGroupShareLink(collection)
                                         }
                                     >
-                                        Copy Share Link
+                                        Share
                                     </button>
                                     <button
                                         className="btn-text danger"
