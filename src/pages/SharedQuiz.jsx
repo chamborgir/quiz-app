@@ -12,13 +12,18 @@ export default function SharedQuiz({ setActiveQuiz }) {
     const [cloning, setCloning] = useState(false);
 
     useEffect(() => {
+        if (!code) {
+            setError("No share code was provided in this link.");
+            return;
+        }
         getQuizByShareCode(code)
             .then(setQuiz)
-            .catch(() =>
+            .catch((err) => {
+                console.error("Failed to load shared quiz:", err);
                 setError(
                     "This shared quiz was not found or is no longer public.",
-                ),
-            );
+                );
+            });
     }, [code]);
 
     function handlePlay() {
@@ -39,9 +44,8 @@ export default function SharedQuiz({ setActiveQuiz }) {
         }
         setCloning(true);
         try {
-            const saved = await cloneQuiz(quiz, user.id);
+            await cloneQuiz(quiz, user.id);
             navigate("/library");
-            void saved;
         } catch (err) {
             alert("Failed to save copy: " + err.message);
         } finally {
@@ -49,13 +53,17 @@ export default function SharedQuiz({ setActiveQuiz }) {
         }
     }
 
-    if (error)
+    if (error) {
         return (
             <div className="page">
                 <div className="error-box">{error}</div>
             </div>
         );
-    if (!quiz) return <div className="page-loading">Loading shared quiz…</div>;
+    }
+
+    if (!quiz) {
+        return <div className="page-loading">Loading shared quiz…</div>;
+    }
 
     return (
         <div className="page">
@@ -68,10 +76,7 @@ export default function SharedQuiz({ setActiveQuiz }) {
                         : "flashcards"}{" "}
                     · shared with you
                 </p>
-                <div
-                    className="nav-row"
-                    style={{ justifyContent: "center", gap: "1rem" }}
-                >
+                <div className="nav-row centered">
                     <button className="btn" onClick={handlePlay}>
                         Take Quiz
                     </button>

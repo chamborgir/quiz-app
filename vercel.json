@@ -6,6 +6,9 @@
     { "source": "/library", "destination": "/index.html" },
     { "source": "/play", "destination": "/index.html" },
     { "source": "/auth", "destination": "/index.html" },
-    { "source": "/shared/:code", "destination": "/index.html" }
+    { "source": "/create", "destination": "/index.html" },
+    { "source": "/edit/:quizId", "destination": "/index.html" },
+    { "source": "/shared/:code", "destination": "/index.html" },
+    { "source": "/shared-group/:code", "destination": "/index.html" }
   ]
 }
