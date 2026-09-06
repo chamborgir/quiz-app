@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import Icon from "../components/Icon.jsx";
 import { useAuth } from "../context/AuthContext.jsx";
 import {
     listQuizzes,
@@ -38,17 +39,23 @@ export default function Library({ setActiveQuiz }) {
     const [page, setPage] = useState(1);
     const [collectionFilter, setCollectionFilter] = useState(null);
 
-    const [newCollectionName, setNewCollectionName] = useState("");
-    const [creatingCollection, setCreatingCollection] = useState(false);
+    const [collectionShareLinks, setCollectionShareLinks] = useState({});
     const [editingCollectionId, setEditingCollectionId] = useState(null);
     const [editCollectionValue, setEditCollectionValue] = useState("");
-    const [collectionShareLinks, setCollectionShareLinks] = useState({});
+    const [showCreateGroupModal, setShowCreateGroupModal] = useState(false);
+    const [deleteTarget, setDeleteTarget] = useState(null); // { type: 'quiz' | 'group', id, label }
+    const [newCollectionName, setNewCollectionName] = useState("");
+    const [creatingCollection, setCreatingCollection] = useState(false);
 
     const [groupModalQuiz, setGroupModalQuiz] = useState(null);
     const [newGroupInline, setNewGroupInline] = useState("");
     const [creatingInlineGroup, setCreatingInlineGroup] = useState(false);
 
+    const [searchOpen, setSearchOpen] = useState(false);
+    const [searchQuery, setSearchQuery] = useState("");
+
     const menuRef = useRef(null);
+    const searchWrapRef = useRef(null);
 
     useEffect(() => {
         load();
@@ -63,11 +70,18 @@ export default function Library({ setActiveQuiz }) {
             ) {
                 setOpenMenuId(null);
             }
+            if (
+                searchOpen &&
+                searchWrapRef.current &&
+                !searchWrapRef.current.contains(e.target)
+            ) {
+                setSearchOpen(false);
+            }
         }
         document.addEventListener("mousedown", handleClickOutside);
         return () =>
             document.removeEventListener("mousedown", handleClickOutside);
-    }, [openMenuId]);
+    }, [openMenuId, searchOpen]);
 
     async function load() {
         setLoading(true);
@@ -93,6 +107,7 @@ export default function Library({ setActiveQuiz }) {
             quizId: quiz.id,
             title: quiz.title,
             recordAttempts: true,
+            origin: "library",
         });
         navigate("/play");
     }
@@ -114,9 +129,12 @@ export default function Library({ setActiveQuiz }) {
         setEditingId(null);
     }
 
-    async function handleDelete(quizId) {
+    function requestDeleteQuiz(quiz) {
         setOpenMenuId(null);
-        if (!confirm("Delete this quiz permanently?")) return;
+        setDeleteTarget({ type: "quiz", id: quiz.id, label: quiz.title });
+    }
+
+    async function confirmDeleteQuiz(quizId) {
         await deleteQuiz(quizId);
         setQuizzes((prev) => prev.filter((q) => q.id !== quizId));
     }
@@ -194,6 +212,11 @@ export default function Library({ setActiveQuiz }) {
         }
     }
 
+    function openCreateGroupModal() {
+        setNewCollectionName("");
+        setShowCreateGroupModal(true);
+    }
+
     async function handleCreateCollection() {
         const name = newCollectionName.trim();
         if (!name) return;
@@ -202,6 +225,7 @@ export default function Library({ setActiveQuiz }) {
             const created = await createCollection(user.id, name);
             setCollections((prev) => [created, ...prev]);
             setNewCollectionName("");
+            setShowCreateGroupModal(false);
         } catch (err) {
             alert("Failed to create group: " + err.message);
         } finally {
@@ -225,13 +249,15 @@ export default function Library({ setActiveQuiz }) {
         setEditingCollectionId(null);
     }
 
-    async function handleDeleteCollection(collectionId) {
-        if (
-            !confirm(
-                "Delete this group? Quizzes inside it will not be deleted, just un-grouped.",
-            )
-        )
-            return;
+    function requestDeleteCollection(collection) {
+        setDeleteTarget({
+            type: "group",
+            id: collection.id,
+            label: collection.name,
+        });
+    }
+
+    async function confirmDeleteCollection(collectionId) {
         await deleteCollection(collectionId);
         setCollections((prev) => prev.filter((c) => c.id !== collectionId));
         setQuizzes((prev) =>
@@ -263,6 +289,19 @@ export default function Library({ setActiveQuiz }) {
         );
         await navigator.clipboard.writeText(link).catch(() => {});
     }
+    async function handleConfirmDelete() {
+        if (!deleteTarget) return;
+        if (deleteTarget.type === "quiz") {
+            await confirmDeleteQuiz(deleteTarget.id);
+        } else {
+            await confirmDeleteCollection(deleteTarget.id);
+        }
+        setDeleteTarget(null);
+    }
+
+    function cancelDelete() {
+        setDeleteTarget(null);
+    }
 
     function viewCollection(collectionId) {
         setCollectionFilter(collectionId);
@@ -274,10 +313,17 @@ export default function Library({ setActiveQuiz }) {
         return collections.find((c) => c.id === id)?.name || null;
     }
 
+    const searchLower = searchQuery.trim().toLowerCase();
+
     const filteredSorted = useMemo(() => {
         let list = [...quizzes];
         if (collectionFilter) {
             list = list.filter((q) => q.collection_id === collectionFilter);
+        }
+        if (searchLower) {
+            list = list.filter((q) =>
+                q.title.toLowerCase().includes(searchLower),
+            );
         }
         if (sortBy === "date_desc") {
             list.sort(
@@ -305,7 +351,14 @@ export default function Library({ setActiveQuiz }) {
             });
         }
         return list;
-    }, [quizzes, sortBy, collectionFilter]);
+    }, [quizzes, sortBy, collectionFilter, searchLower]);
+
+    const filteredGroups = useMemo(() => {
+        if (!searchLower) return collections;
+        return collections.filter((c) =>
+            c.name.toLowerCase().includes(searchLower),
+        );
+    }, [collections, searchLower]);
 
     const totalPages = Math.max(
         1,
@@ -321,305 +374,574 @@ export default function Library({ setActiveQuiz }) {
         setPage(1);
     }
 
-    if (loading)
-        return <div className="page-loading">Loading your library…</div>;
+    function closeSearch() {
+        setSearchOpen(false);
+    }
 
     return (
         <div className="page">
-            <h2>My Library</h2>
-
-            <div className="lib-tabs">
-                <button
-                    className={`lib-tab ${tab === "all" ? "active" : ""}`}
-                    onClick={() => {
-                        setTab("all");
-                        setCollectionFilter(null);
-                        setPage(1);
-                    }}
-                >
-                    All Quizzes
-                </button>
-                <button
-                    className={`lib-tab ${tab === "groups" ? "active" : ""}`}
-                    onClick={() => setTab("groups")}
-                >
-                    Groups
-                </button>
+            <div className="library-top-row">
+                <h2>My Library</h2>
+                {!searchOpen && (
+                    <button
+                        className="search-icon-btn"
+                        onClick={() => setSearchOpen(true)}
+                        aria-label="Search library"
+                    >
+                        <Icon name="search" />
+                    </button>
+                )}
             </div>
 
-            {tab === "all" && (
-                <>
-                    {collectionFilter && (
-                        <div className="filter-banner">
-                            Showing:{" "}
-                            <strong>{collectionName(collectionFilter)}</strong>
-                            <button
-                                className="btn-text"
-                                onClick={() => {
-                                    setCollectionFilter(null);
-                                    setPage(1);
-                                }}
-                            >
-                                Clear filter
-                            </button>
-                        </div>
-                    )}
-
-                    <div className="sort-buttons-row">
+            <div className="lib-tabs-wrap" ref={searchWrapRef}>
+                {searchOpen ? (
+                    <div className="search-bar-row">
+                        <span className="search-bar-icon-fixed">
+                            <Icon name="search" size={16} />
+                        </span>
+                        <input
+                            autoFocus
+                            type="text"
+                            className="search-bar-input"
+                            placeholder="Search quizzes or groups…"
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onKeyDown={(e) =>
+                                e.key === "Enter" && closeSearch()
+                            }
+                        />
                         <button
-                            className={`option-btn sort-btn ${sortBy === "date_desc" ? "active" : ""}`}
-                            onClick={() => changeSort("date_desc")}
+                            type="button"
+                            className="search-enter-btn"
+                            onClick={closeSearch}
                         >
-                            Newest
-                        </button>
-                        <button
-                            className={`option-btn sort-btn ${sortBy === "date_asc" ? "active" : ""}`}
-                            onClick={() => changeSort("date_asc")}
-                        >
-                            Oldest
-                        </button>
-                        <button
-                            className={`option-btn sort-btn ${sortBy === "type" ? "active" : ""}`}
-                            onClick={() => changeSort("type")}
-                        >
-                            Type
-                        </button>
-                        <button
-                            className={`option-btn sort-btn ${sortBy === "recent" ? "active" : ""}`}
-                            onClick={() => changeSort("recent")}
-                        >
-                            Recent
+                            Enter
                         </button>
                     </div>
+                ) : (
+                    <div className="lib-tabs">
+                        <button
+                            className={`lib-tab ${tab === "all" ? "active" : ""}`}
+                            onClick={() => {
+                                setTab("all");
+                                setCollectionFilter(null);
+                                setPage(1);
+                            }}
+                        >
+                            All Quizzes
+                        </button>
+                        <button
+                            className={`lib-tab ${tab === "groups" ? "active" : ""}`}
+                            onClick={() => setTab("groups")}
+                        >
+                            Groups
+                        </button>
+                    </div>
+                )}
+            </div>
 
-                    {filteredSorted.length === 0 && (
-                        <p className="muted">No quizzes here yet.</p>
+            {loading ? (
+                <div className="library-loading">
+                    <div className="spinner"></div>
+                    <p className="muted">Loading your library…</p>
+                </div>
+            ) : (
+                <>
+                    {tab === "all" && (
+                        <>
+                            {collectionFilter && (
+                                <div className="filter-banner">
+                                    Showing:{" "}
+                                    <strong>
+                                        {collectionName(collectionFilter)}
+                                    </strong>
+                                    <button
+                                        className="btn-text"
+                                        onClick={() => {
+                                            setCollectionFilter(null);
+                                            setPage(1);
+                                        }}
+                                    >
+                                        Clear filter
+                                    </button>
+                                </div>
+                            )}
+
+                            <div className="sort-buttons-row">
+                                <button
+                                    className={`option-btn sort-btn ${sortBy === "date_desc" ? "active" : ""}`}
+                                    onClick={() => changeSort("date_desc")}
+                                >
+                                    Newest
+                                </button>
+                                <button
+                                    className={`option-btn sort-btn ${sortBy === "date_asc" ? "active" : ""}`}
+                                    onClick={() => changeSort("date_asc")}
+                                >
+                                    Oldest
+                                </button>
+                                <button
+                                    className={`option-btn sort-btn ${sortBy === "type" ? "active" : ""}`}
+                                    onClick={() => changeSort("type")}
+                                >
+                                    Type
+                                </button>
+                                <button
+                                    className={`option-btn sort-btn ${sortBy === "recent" ? "active" : ""}`}
+                                    onClick={() => changeSort("recent")}
+                                >
+                                    Recent
+                                </button>
+                            </div>
+
+                            {filteredSorted.length === 0 && (
+                                <p className="muted">
+                                    {searchLower
+                                        ? "No quizzes match your search."
+                                        : "No quizzes here yet."}
+                                </p>
+                            )}
+
+                            {pagedQuizzes.map((quiz) => (
+                                <div
+                                    key={quiz.id}
+                                    className="card library-item"
+                                >
+                                    <div className="library-header">
+                                        {editingId === quiz.id ? (
+                                            <input
+                                                className="inline-input"
+                                                value={editValue}
+                                                onChange={(e) =>
+                                                    setEditValue(e.target.value)
+                                                }
+                                                onKeyDown={(e) =>
+                                                    e.key === "Enter" &&
+                                                    saveEdit(quiz.id)
+                                                }
+                                                onBlur={() => saveEdit(quiz.id)}
+                                                autoFocus
+                                            />
+                                        ) : (
+                                            <h3>{quiz.title}</h3>
+                                        )}
+
+                                        <div className="header-right">
+                                            <span
+                                                className={`badge ${quiz.mode}`}
+                                            >
+                                                {quiz.mode === "mcq"
+                                                    ? "MCQ"
+                                                    : "Cards"}
+                                            </span>
+
+                                            <div
+                                                className="quiz-menu-wrap"
+                                                ref={
+                                                    openMenuId === quiz.id
+                                                        ? menuRef
+                                                        : null
+                                                }
+                                            >
+                                                <button
+                                                    className="menu-trigger"
+                                                    onClick={() =>
+                                                        setOpenMenuId(
+                                                            openMenuId ===
+                                                                quiz.id
+                                                                ? null
+                                                                : quiz.id,
+                                                        )
+                                                    }
+                                                    aria-label="More options"
+                                                >
+                                                    <svg
+                                                        width="18"
+                                                        height="18"
+                                                        viewBox="0 0 24 24"
+                                                        fill="currentColor"
+                                                        aria-hidden="true"
+                                                    >
+                                                        <circle
+                                                            cx="12"
+                                                            cy="5"
+                                                            r="2"
+                                                        />
+                                                        <circle
+                                                            cx="12"
+                                                            cy="12"
+                                                            r="2"
+                                                        />
+                                                        <circle
+                                                            cx="12"
+                                                            cy="19"
+                                                            r="2"
+                                                        />
+                                                    </svg>
+                                                </button>
+                                                {openMenuId === quiz.id && (
+                                                    <div className="quiz-menu">
+                                                        <button
+                                                            onClick={() => {
+                                                                setOpenMenuId(
+                                                                    null,
+                                                                );
+                                                                navigate(
+                                                                    `/edit/${quiz.id}`,
+                                                                );
+                                                            }}
+                                                        >
+                                                            Edit Questions
+                                                        </button>
+                                                        <button
+                                                            onClick={() =>
+                                                                startEdit(quiz)
+                                                            }
+                                                        >
+                                                            Rename
+                                                        </button>
+                                                        <button
+                                                            onClick={() => {
+                                                                setOpenMenuId(
+                                                                    null,
+                                                                );
+                                                                openGroupModal(
+                                                                    quiz,
+                                                                );
+                                                            }}
+                                                        >
+                                                            {quiz.collection_id
+                                                                ? "Change Group"
+                                                                : "Add to Group"}
+                                                        </button>
+                                                        <button
+                                                            onClick={() =>
+                                                                handleCopyShareLink(
+                                                                    quiz,
+                                                                )
+                                                            }
+                                                        >
+                                                            Copy Share Link
+                                                        </button>
+                                                        <button
+                                                            className="danger"
+                                                            onClick={() =>
+                                                                requestDeleteQuiz(
+                                                                    quiz,
+                                                                )
+                                                            }
+                                                        >
+                                                            Delete
+                                                        </button>
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <p className="muted small">
+                                        {quiz.count} items ·{" "}
+                                        {new Date(
+                                            quiz.created_at,
+                                        ).toLocaleDateString()}
+                                        {quiz.last_accessed_at && (
+                                            <>
+                                                {" "}
+                                                · Last taken{" "}
+                                                {new Date(
+                                                    quiz.last_accessed_at,
+                                                ).toLocaleDateString()}
+                                            </>
+                                        )}
+                                        {quiz.collection_id && (
+                                            <>
+                                                {" "}
+                                                · Group:{" "}
+                                                <strong>
+                                                    {collectionName(
+                                                        quiz.collection_id,
+                                                    )}
+                                                </strong>
+                                            </>
+                                        )}
+                                    </p>
+
+                                    <div className="library-actions">
+                                        <button
+                                            className="btn btn-sm"
+                                            onClick={() => startPlay(quiz)}
+                                        >
+                                            Take Quiz
+                                        </button>
+                                        {quiz.mode === "mcq" && (
+                                            <button
+                                                className="btn-text"
+                                                onClick={() =>
+                                                    toggleHistory(quiz)
+                                                }
+                                            >
+                                                {expandedId === quiz.id
+                                                    ? "Hide history"
+                                                    : "History"}
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {shareLinks[quiz.id] && (
+                                        <div className="share-link-box">
+                                            <input
+                                                readOnly
+                                                value={shareLinks[quiz.id]}
+                                                onFocus={(e) =>
+                                                    e.target.select()
+                                                }
+                                            />
+                                            <span className="copied-tag">
+                                                Link copied
+                                            </span>
+                                        </div>
+                                    )}
+
+                                    {expandedId === quiz.id && (
+                                        <div className="attempt-history">
+                                            {(attempts[quiz.id] || [])
+                                                .length === 0 && (
+                                                <p className="muted small">
+                                                    No attempts yet.
+                                                </p>
+                                            )}
+                                            {(attempts[quiz.id] || []).map(
+                                                (a) => (
+                                                    <div
+                                                        key={a.id}
+                                                        className="attempt-row"
+                                                    >
+                                                        <span>
+                                                            {a.score} /{" "}
+                                                            {a.total}
+                                                        </span>
+                                                        <span className="muted small">
+                                                            {new Date(
+                                                                a.attempted_at,
+                                                            ).toLocaleString()}
+                                                        </span>
+                                                    </div>
+                                                ),
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            ))}
+
+                            {totalPages > 1 && (
+                                <div className="pagination-row">
+                                    <button
+                                        className="btn-text"
+                                        onClick={() =>
+                                            setPage((p) => Math.max(1, p - 1))
+                                        }
+                                        disabled={page === 1}
+                                    >
+                                        ← Prev
+                                    </button>
+                                    {Array.from(
+                                        { length: totalPages },
+                                        (_, i) => i + 1,
+                                    ).map((p) => (
+                                        <button
+                                            key={p}
+                                            className={`page-num ${p === page ? "active" : ""}`}
+                                            onClick={() => setPage(p)}
+                                        >
+                                            {p}
+                                        </button>
+                                    ))}
+                                    <button
+                                        className="btn-text"
+                                        onClick={() =>
+                                            setPage((p) =>
+                                                Math.min(totalPages, p + 1),
+                                            )
+                                        }
+                                        disabled={page === totalPages}
+                                    >
+                                        Next →
+                                    </button>
+                                </div>
+                            )}
+                        </>
                     )}
 
-                    {pagedQuizzes.map((quiz) => (
-                        <div key={quiz.id} className="card library-item">
-                            <div className="library-header">
-                                {editingId === quiz.id ? (
-                                    <input
-                                        className="inline-input"
-                                        value={editValue}
-                                        onChange={(e) =>
-                                            setEditValue(e.target.value)
-                                        }
-                                        onKeyDown={(e) =>
-                                            e.key === "Enter" &&
-                                            saveEdit(quiz.id)
-                                        }
-                                        onBlur={() => saveEdit(quiz.id)}
-                                        autoFocus
-                                    />
-                                ) : (
-                                    <h3>{quiz.title}</h3>
-                                )}
+                    {tab === "groups" && (
+                        <>
+                            <div
+                                className="nav-row centered"
+                                style={{ marginBottom: "1.25rem" }}
+                            >
+                                <button
+                                    className="btn"
+                                    onClick={openCreateGroupModal}
+                                >
+                                    + Create Group
+                                </button>
+                            </div>
 
-                                <div className="header-right">
-                                    <span className={`badge ${quiz.mode}`}>
-                                        {quiz.mode === "mcq" ? "MCQ" : "Cards"}
-                                    </span>
+                            {filteredGroups.length === 0 && (
+                                <p className="muted">
+                                    {searchLower
+                                        ? "No groups match your search."
+                                        : "No groups yet. Create one to start grouping your quizzes."}
+                                </p>
+                            )}
 
+                            {filteredGroups.map((collection) => {
+                                const quizCount = quizzes.filter(
+                                    (q) => q.collection_id === collection.id,
+                                ).length;
+                                return (
                                     <div
-                                        className="quiz-menu-wrap"
-                                        ref={
-                                            openMenuId === quiz.id
-                                                ? menuRef
-                                                : null
-                                        }
+                                        key={collection.id}
+                                        className="card library-item"
                                     >
-                                        <button
-                                            className="menu-trigger"
-                                            onClick={() =>
-                                                setOpenMenuId(
-                                                    openMenuId === quiz.id
-                                                        ? null
-                                                        : quiz.id,
-                                                )
-                                            }
-                                            aria-label="More options"
-                                        >
-                                            ⋮
-                                        </button>
-                                        {openMenuId === quiz.id && (
-                                            <div className="quiz-menu">
+                                        <div className="library-header">
+                                            {editingCollectionId ===
+                                            collection.id ? (
+                                                <input
+                                                    className="inline-input"
+                                                    value={editCollectionValue}
+                                                    onChange={(e) =>
+                                                        setEditCollectionValue(
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    onKeyDown={(e) =>
+                                                        e.key === "Enter" &&
+                                                        saveEditCollection(
+                                                            collection.id,
+                                                        )
+                                                    }
+                                                    onBlur={() =>
+                                                        saveEditCollection(
+                                                            collection.id,
+                                                        )
+                                                    }
+                                                    autoFocus
+                                                />
+                                            ) : (
+                                                <h3>{collection.name}</h3>
+                                            )}
+                                            <span className="badge">
+                                                {quizCount} quiz
+                                                {quizCount === 1 ? "" : "zes"}
+                                            </span>
+                                        </div>
+
+                                        <div className="group-actions-row">
+                                            <button
+                                                className="btn-sm"
+                                                onClick={() =>
+                                                    viewCollection(
+                                                        collection.id,
+                                                    )
+                                                }
+                                            >
+                                                View
+                                            </button>
+                                            {editingCollectionId ===
+                                            collection.id ? (
                                                 <button
-                                                    onClick={() => {
-                                                        setOpenMenuId(null);
-                                                        navigate(
-                                                            `/edit/${quiz.id}`,
-                                                        );
-                                                    }}
-                                                >
-                                                    Edit Questions
-                                                </button>
-                                                <button
+                                                    className="btn-text"
                                                     onClick={() =>
-                                                        startEdit(quiz)
+                                                        saveEditCollection(
+                                                            collection.id,
+                                                        )
+                                                    }
+                                                >
+                                                    Save
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    className="btn-text"
+                                                    onClick={() =>
+                                                        startEditCollection(
+                                                            collection,
+                                                        )
                                                     }
                                                 >
                                                     Rename
                                                 </button>
-                                                <button
-                                                    onClick={() => {
-                                                        setOpenMenuId(null);
-                                                        openGroupModal(quiz);
-                                                    }}
-                                                >
-                                                    {quiz.collection_id
-                                                        ? "Change Group"
-                                                        : "Add to Group"}
-                                                </button>
-                                                <button
-                                                    onClick={() =>
-                                                        handleCopyShareLink(
-                                                            quiz,
-                                                        )
+                                            )}
+                                            <button
+                                                className="btn-text"
+                                                onClick={() =>
+                                                    handleCopyGroupShareLink(
+                                                        collection,
+                                                    )
+                                                }
+                                            >
+                                                Share
+                                            </button>
+                                            <button
+                                                className="btn-text danger"
+                                                onClick={() =>
+                                                    requestDeleteCollection(
+                                                        collection,
+                                                    )
+                                                }
+                                            >
+                                                Delete
+                                            </button>
+                                        </div>
+
+                                        {collectionShareLinks[
+                                            collection.id
+                                        ] && (
+                                            <div className="share-link-box">
+                                                <input
+                                                    readOnly
+                                                    value={
+                                                        collectionShareLinks[
+                                                            collection.id
+                                                        ]
                                                     }
-                                                >
-                                                    Copy Share Link
-                                                </button>
-                                                <button
-                                                    className="danger"
-                                                    onClick={() =>
-                                                        handleDelete(quiz.id)
+                                                    onFocus={(e) =>
+                                                        e.target.select()
                                                     }
-                                                >
-                                                    Delete
-                                                </button>
+                                                />
+                                                <span className="copied-tag">
+                                                    Link copied
+                                                </span>
                                             </div>
                                         )}
                                     </div>
-                                </div>
-                            </div>
-
-                            <p className="muted small">
-                                {quiz.count} items ·{" "}
-                                {new Date(quiz.created_at).toLocaleDateString()}
-                                {quiz.last_accessed_at && (
-                                    <>
-                                        {" "}
-                                        · Last taken{" "}
-                                        {new Date(
-                                            quiz.last_accessed_at,
-                                        ).toLocaleDateString()}
-                                    </>
-                                )}
-                                {quiz.collection_id && (
-                                    <>
-                                        {" "}
-                                        · Group:{" "}
-                                        <strong>
-                                            {collectionName(quiz.collection_id)}
-                                        </strong>
-                                    </>
-                                )}
-                            </p>
-
-                            <div className="library-actions">
-                                <button
-                                    className="btn btn-sm"
-                                    onClick={() => startPlay(quiz)}
-                                >
-                                    Take Quiz
-                                </button>
-                                {quiz.mode === "mcq" && (
-                                    <button
-                                        className="btn-text"
-                                        onClick={() => toggleHistory(quiz)}
-                                    >
-                                        {expandedId === quiz.id
-                                            ? "Hide history"
-                                            : "History"}
-                                    </button>
-                                )}
-                            </div>
-
-                            {shareLinks[quiz.id] && (
-                                <div className="share-link-box">
-                                    <input
-                                        readOnly
-                                        value={shareLinks[quiz.id]}
-                                        onFocus={(e) => e.target.select()}
-                                    />
-                                    <span className="copied-tag">
-                                        Link copied
-                                    </span>
-                                </div>
-                            )}
-
-                            {expandedId === quiz.id && (
-                                <div className="attempt-history">
-                                    {(attempts[quiz.id] || []).length === 0 && (
-                                        <p className="muted small">
-                                            No attempts yet.
-                                        </p>
-                                    )}
-                                    {(attempts[quiz.id] || []).map((a) => (
-                                        <div key={a.id} className="attempt-row">
-                                            <span>
-                                                {a.score} / {a.total}
-                                            </span>
-                                            <span className="muted small">
-                                                {new Date(
-                                                    a.attempted_at,
-                                                ).toLocaleString()}
-                                            </span>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
-                        </div>
-                    ))}
-
-                    {totalPages > 1 && (
-                        <div className="pagination-row">
-                            <button
-                                className="btn-text"
-                                onClick={() =>
-                                    setPage((p) => Math.max(1, p - 1))
-                                }
-                                disabled={page === 1}
-                            >
-                                ← Prev
-                            </button>
-                            {Array.from(
-                                { length: totalPages },
-                                (_, i) => i + 1,
-                            ).map((p) => (
-                                <button
-                                    key={p}
-                                    className={`page-num ${p === page ? "active" : ""}`}
-                                    onClick={() => setPage(p)}
-                                >
-                                    {p}
-                                </button>
-                            ))}
-                            <button
-                                className="btn-text"
-                                onClick={() =>
-                                    setPage((p) => Math.min(totalPages, p + 1))
-                                }
-                                disabled={page === totalPages}
-                            >
-                                Next →
-                            </button>
-                        </div>
+                                );
+                            })}
+                        </>
                     )}
                 </>
             )}
 
-            {tab === "groups" && (
-                <>
-                    <div className="card">
-                        <div
-                            className="field"
-                            style={{ marginBottom: "0.75rem" }}
+            {showCreateGroupModal && (
+                <div
+                    className="modal-overlay"
+                    onClick={() => setShowCreateGroupModal(false)}
+                >
+                    <div
+                        className="modal-card"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            className="modal-close"
+                            onClick={() => setShowCreateGroupModal(false)}
+                            aria-label="Close"
                         >
-                            <label>New Group Name</label>
+                            ×
+                        </button>
+                        <h3>Create New Group</h3>
+                        <div className="field" style={{ marginBottom: "1rem" }}>
+                            <label>Group Name</label>
                             <input
+                                autoFocus
                                 value={newCollectionName}
                                 onChange={(e) =>
                                     setNewCollectionName(e.target.value)
@@ -642,129 +964,11 @@ export default function Library({ setActiveQuiz }) {
                             >
                                 {creatingCollection
                                     ? "Creating…"
-                                    : "+ Create Group"}
+                                    : "Create Group"}
                             </button>
                         </div>
                     </div>
-
-                    {collections.length === 0 && (
-                        <p className="muted">
-                            No groups yet. Create one above to start grouping
-                            your quizzes.
-                        </p>
-                    )}
-
-                    {collections.map((collection) => {
-                        const quizCount = quizzes.filter(
-                            (q) => q.collection_id === collection.id,
-                        ).length;
-                        return (
-                            <div
-                                key={collection.id}
-                                className="card library-item"
-                            >
-                                <div className="library-header">
-                                    {editingCollectionId === collection.id ? (
-                                        <input
-                                            className="inline-input"
-                                            value={editCollectionValue}
-                                            onChange={(e) =>
-                                                setEditCollectionValue(
-                                                    e.target.value,
-                                                )
-                                            }
-                                            onKeyDown={(e) =>
-                                                e.key === "Enter" &&
-                                                saveEditCollection(
-                                                    collection.id,
-                                                )
-                                            }
-                                            onBlur={() =>
-                                                saveEditCollection(
-                                                    collection.id,
-                                                )
-                                            }
-                                            autoFocus
-                                        />
-                                    ) : (
-                                        <h3>{collection.name}</h3>
-                                    )}
-                                    <span className="badge">
-                                        {quizCount} quiz
-                                        {quizCount === 1 ? "" : "zes"}
-                                    </span>
-                                </div>
-
-                                <div className="group-actions-row">
-                                    <button
-                                        className="btn-sm"
-                                        onClick={() =>
-                                            viewCollection(collection.id)
-                                        }
-                                    >
-                                        View
-                                    </button>
-                                    {editingCollectionId === collection.id ? (
-                                        <button
-                                            className="btn-text"
-                                            onClick={() =>
-                                                saveEditCollection(
-                                                    collection.id,
-                                                )
-                                            }
-                                        >
-                                            Save
-                                        </button>
-                                    ) : (
-                                        <button
-                                            className="btn-text"
-                                            onClick={() =>
-                                                startEditCollection(collection)
-                                            }
-                                        >
-                                            Rename
-                                        </button>
-                                    )}
-                                    <button
-                                        className="btn-text"
-                                        onClick={() =>
-                                            handleCopyGroupShareLink(collection)
-                                        }
-                                    >
-                                        Share
-                                    </button>
-                                    <button
-                                        className="btn-text danger"
-                                        onClick={() =>
-                                            handleDeleteCollection(
-                                                collection.id,
-                                            )
-                                        }
-                                    >
-                                        Delete
-                                    </button>
-                                </div>
-
-                                {collectionShareLinks[collection.id] && (
-                                    <div className="share-link-box">
-                                        <input
-                                            readOnly
-                                            value={
-                                                collectionShareLinks[
-                                                    collection.id
-                                                ]
-                                            }
-                                            onFocus={(e) => e.target.select()}
-                                        />
-                                        <span className="copied-tag">
-                                            Link copied
-                                        </span>
-                                    </div>
-                                )}
-                            </div>
-                        );
-                    })}
-                </>
+                </div>
             )}
 
             {groupModalQuiz && (
@@ -831,6 +1035,53 @@ export default function Library({ setActiveQuiz }) {
                                 ? "Creating…"
                                 : "+ Create & Add"}
                         </button>
+                    </div>
+                </div>
+            )}
+
+            {deleteTarget && (
+                <div className="modal-overlay" onClick={cancelDelete}>
+                    <div
+                        className="modal-card result-modal"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            className="modal-close"
+                            onClick={cancelDelete}
+                            aria-label="Close"
+                        >
+                            ×
+                        </button>
+                        <Icon
+                            name="trash"
+                            size={36}
+                            className="result-emoji-icon"
+                        />
+                        <p className="warning-title">
+                            Delete "{deleteTarget.label}"?
+                        </p>
+                        <p
+                            className="muted"
+                            style={{ marginBottom: "1.25rem" }}
+                        >
+                            {deleteTarget.type === "quiz"
+                                ? "This will permanently delete the quiz. This cannot be undone."
+                                : "This will delete the group. Quizzes inside it will not be deleted, just un-grouped."}
+                        </p>
+                        <div className="nav-row centered">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={cancelDelete}
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                className="btn btn-delete-confirm"
+                                onClick={handleConfirmDelete}
+                            >
+                                Delete
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}

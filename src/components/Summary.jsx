@@ -3,7 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { saveQuiz, getOrCreateShareCode } from "../lib/quizApi.js";
 import FormattedText from "./FormattedText.jsx";
-
+import Icon from "../components/Icon.jsx";
 const PASS_THRESHOLD = 0.75;
 
 function buildDraft(mode, item) {
@@ -191,9 +191,11 @@ export default function Summary({
                         >
                             ×
                         </button>
-                        <div className="result-emoji">
-                            {passed ? "🎉" : "💪"}
-                        </div>
+                        <Icon
+                            name={passed ? "celebrate" : "effort"}
+                            size={40}
+                            className="result-emoji-icon"
+                        />
                         <div className="score-number">
                             {score} / {questions.length}
                         </div>

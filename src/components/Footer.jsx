@@ -3,7 +3,7 @@ export default function Footer() {
         <footer className="app-footer">
             <p>
                 Made with React + Supabase + Vercel · Rochambeau Boquilon ·
-                v1.0.7
+                v1.0.8
             </p>
         </footer>
     );

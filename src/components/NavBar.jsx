@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext.jsx";
 import { useTheme, PALETTES } from "../context/ThemeContext.jsx";
+import Icon from "./Icon.jsx";
 
 export default function NavBar() {
     const { user, signOut } = useAuth();
@@ -9,6 +10,7 @@ export default function NavBar() {
     const navigate = useNavigate();
     const [menuOpen, setMenuOpen] = useState(false);
     const menuRef = useRef(null);
+    const location = useLocation();
 
     useEffect(() => {
         function handleClickOutside(e) {
@@ -39,14 +41,21 @@ export default function NavBar() {
                 QuizLEPT
             </Link>
             <nav className="nav-links">
-                {user && <Link to="/library">Library</Link>}
-
+                {user && (
+                    <Link
+                        to="/library"
+                        className={`library-icon-btn ${location.pathname === "/library" ? "active" : ""}`}
+                        aria-label="Library"
+                    >
+                        <Icon name="book" />
+                    </Link>
+                )}
                 <button
                     className="theme-toggle"
                     onClick={toggleMode}
                     aria-label="Toggle dark mode"
                 >
-                    {mode === "dark" ? "☀️" : "🌙"}
+                    <Icon name={mode === "dark" ? "sun" : "moon"} />{" "}
                 </button>
 
                 {user ? (

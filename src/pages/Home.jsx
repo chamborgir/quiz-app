@@ -5,6 +5,7 @@ import { saveQuiz } from "../lib/quizApi.js";
 import UploadStep from "../components/UploadStep.jsx";
 import SetupStep from "../components/SetupStep.jsx";
 import PasteTextModal from "../components/PasteTextModal.jsx";
+import Icon from "../components/Icon.jsx";
 
 export default function Home({ setActiveQuiz }) {
     const { user } = useAuth();
@@ -120,6 +121,7 @@ export default function Home({ setActiveQuiz }) {
                 quizId,
                 title,
                 recordAttempts: true,
+                origin: "home",
             });
             navigate("/play");
         } catch (err) {
@@ -137,8 +139,8 @@ export default function Home({ setActiveQuiz }) {
             <div className="hero">
                 <h1>Turn any text into flashcards or a quiz</h1>
                 <p className="muted">
-                    Upload PDFs, MSWord documents, notes, a chapter, or an article and get a study
-                    set in seconds.
+                    Upload PDFs, MSWord documents, notes, a chapter, or an
+                    article and get a study set in seconds.
                 </p>
             </div>
 
@@ -156,7 +158,11 @@ export default function Home({ setActiveQuiz }) {
                                     className="paste-text-card"
                                     onClick={() => setShowPasteModal(true)}
                                 >
-                                    <span className="paste-text-icon">📋</span>
+                                    <Icon
+                                        name="clipboard"
+                                        size={28}
+                                        className="paste-text-icon"
+                                    />{" "}
                                     <span className="paste-text-label">
                                         Paste Text Directly
                                     </span>

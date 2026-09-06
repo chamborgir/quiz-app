@@ -33,6 +33,7 @@ export default function SharedQuiz({ setActiveQuiz }) {
             quizId: null,
             title: quiz.title,
             recordAttempts: false,
+            origin: "home",
         });
         navigate("/play");
     }

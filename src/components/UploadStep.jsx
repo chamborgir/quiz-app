@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { extractTextFromPdf } from "../utils/pdf.js";
 import { extractTextFromDocx } from "../utils/docx.js";
+import Icon from "./Icon.jsx";
 
 const DOCX_MIME =
     "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -62,7 +63,7 @@ export default function UploadStep({ onExtracted }) {
                     style={{ display: "none" }}
                     onChange={(e) => handleFile(e.target.files[0])}
                 />
-                <div style={{ fontSize: "2.5rem" }}>📄</div>
+                <Icon name="upload" size={36} />{" "}
                 <p>
                     <strong>Click to upload</strong> or drag & drop
                 </p>

@@ -6,12 +6,13 @@ import { shuffleQuizQuestions } from "../utils/shuffle.js";
 import Flashcards from "../components/Flashcards.jsx";
 import MultipleChoice from "../components/MultipleChoice.jsx";
 import Summary from "../components/Summary.jsx";
+import Icon from "../components/Icon.jsx";
 
 const TIMER_PRESETS = [
     { label: "No timer", minutes: null },
-    { label: "15 mins", minutes: 15 },
-    { label: "30 mins", minutes: 30 },
-    { label: "60 mins", minutes: 60 },
+    { label: "10 min", minutes: 10 },
+    { label: "20 min", minutes: 20 },
+    { label: "30 min", minutes: 30 },
 ];
 
 const PASS_PRESETS = [60, 75, 80];
@@ -156,6 +157,7 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
     const [answers, setAnswers] = useState({});
     const [runKey, setRunKey] = useState(0);
     const [showLeaveWarning, setShowLeaveWarning] = useState(false);
+    const [showGuestChoice, setShowGuestChoice] = useState(false);
     const [pendingLeaveAction, setPendingLeaveAction] = useState(null);
 
     const questions = useMemo(() => {
@@ -165,6 +167,10 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
     }, [activeQuiz, runKey]);
 
     const isInProgress = phase === "quiz";
+
+    function destinationPath() {
+        return activeQuiz?.origin === "library" ? "/library" : "/";
+    }
 
     useEffect(() => {
         if (!isInProgress) return;
@@ -176,11 +182,16 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
 
         function handlePopState() {
             window.history.pushState(null, "", window.location.href);
-            setPendingLeaveAction(() => () => {
+            const leaveAction = () => {
                 setActiveQuiz(null);
-                navigate("/");
-            });
-            setShowLeaveWarning(true);
+                navigate(destinationPath());
+            };
+            setPendingLeaveAction(() => leaveAction);
+            if (!user) {
+                setShowGuestChoice(true);
+            } else {
+                setShowLeaveWarning(true);
+            }
         }
 
         window.history.pushState(null, "", window.location.href);
@@ -191,7 +202,8 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
             window.removeEventListener("beforeunload", handleBeforeUnload);
             window.removeEventListener("popstate", handlePopState);
         };
-    }, [isInProgress, navigate, setActiveQuiz]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isInProgress, navigate, setActiveQuiz, user]);
 
     if (!activeQuiz) {
         navigate("/");
@@ -248,7 +260,11 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
     function requestExit(action) {
         if (isInProgress) {
             setPendingLeaveAction(() => action);
-            setShowLeaveWarning(true);
+            if (!user) {
+                setShowGuestChoice(true);
+            } else {
+                setShowLeaveWarning(true);
+            }
         } else {
             action();
         }
@@ -257,7 +273,7 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
     function handleRestart() {
         requestExit(() => {
             setActiveQuiz(null);
-            navigate("/");
+            navigate(destinationPath());
         });
     }
 
@@ -269,6 +285,24 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
 
     function cancelLeave() {
         setShowLeaveWarning(false);
+        setPendingLeaveAction(null);
+    }
+
+    function guestGoHome() {
+        setShowGuestChoice(false);
+        if (pendingLeaveAction) pendingLeaveAction();
+        setPendingLeaveAction(null);
+    }
+
+    function guestCreateAccount() {
+        setShowGuestChoice(false);
+        setPendingLeaveAction(null);
+        setActiveQuiz(null);
+        navigate("/auth");
+    }
+
+    function guestCancelChoice() {
+        setShowGuestChoice(false);
         setPendingLeaveAction(null);
     }
 
@@ -318,7 +352,7 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
                         onClick={() =>
                             requestExit(() => {
                                 setActiveQuiz(null);
-                                navigate("/");
+                                navigate(destinationPath());
                             })
                         }
                     >
@@ -340,7 +374,11 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
                         >
                             ×
                         </button>
-                        <div className="result-emoji">⚠️</div>
+                        <Icon
+                            name="warning"
+                            size={36}
+                            className="result-emoji-icon"
+                        />
                         <p className="warning-title">
                             Are you sure you want to go back?
                         </p>
@@ -360,6 +398,51 @@ export default function QuizRunnerPage({ activeQuiz, setActiveQuiz }) {
                             </button>
                             <button className="btn" onClick={confirmLeave}>
                                 Leave Anyway
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {showGuestChoice && (
+                <div className="modal-overlay" onClick={guestCancelChoice}>
+                    <div
+                        className="modal-card result-modal"
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        <button
+                            className="modal-close"
+                            onClick={guestCancelChoice}
+                            aria-label="Close"
+                        >
+                            ×
+                        </button>
+                        <Icon
+                            name="warning"
+                            size={36}
+                            className="result-emoji-icon"
+                        />
+                        <p className="warning-title">Leave this quiz?</p>
+                        <p
+                            className="muted"
+                            style={{ marginBottom: "1.25rem" }}
+                        >
+                            Your current attempt won't be saved. Create a free
+                            account to save quizzes and track your progress next
+                            time.
+                        </p>
+                        <div className="nav-row centered">
+                            <button
+                                className="btn btn-secondary"
+                                onClick={guestGoHome}
+                            >
+                                Go to Home
+                            </button>
+                            <button
+                                className="btn"
+                                onClick={guestCreateAccount}
+                            >
+                                Create Account
                             </button>
                         </div>
                     </div>

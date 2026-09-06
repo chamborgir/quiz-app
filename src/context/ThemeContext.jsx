@@ -41,10 +41,17 @@ export function ThemeProvider({ children }) {
     // On sign-in: pull saved preference from Supabase (cloud wins over local device value)
     useEffect(() => {
         if (!user) {
+            if (hasLoadedForUser.current !== null) {
+                // a user just signed out — reset to the default theme rather than leaving their last account theme applied
+                setMode("light");
+                setPaletteState("cream");
+                localStorage.setItem("theme_mode", "light");
+                localStorage.setItem("theme_palette", "cream");
+            }
             hasLoadedForUser.current = null;
             return;
         }
-        if (hasLoadedForUser.current === user.id) return; // already synced this session
+        if (hasLoadedForUser.current === user.id) return;
 
         (async () => {
             try {
@@ -53,7 +60,6 @@ export function ThemeProvider({ children }) {
                     setMode(prefs.theme_mode);
                     setPaletteState(prefs.theme_palette);
                 } else {
-                    // First time this account has ever set a preference — save current local value as their default
                     await upsertPreferences(user.id, {
                         theme_mode: mode,
                         theme_palette: palette,
