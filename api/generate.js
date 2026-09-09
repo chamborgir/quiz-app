@@ -4,17 +4,18 @@ const MODEL_CONFIGS = {
   'gemini-3.6-flash':      { maxOutputTokens: 20000, label: 'Gemini 3.6 Flash (strongest reasoning, higher cost)' },
 };
 
-const ACTIVE_MODEL = 'gemini-3.1-flash-lite'; // <-- CHANGE THIS LINE TO SWITCH MODELS, then redeploy
+const ACTIVE_MODEL = 'gemini-3.6-flash'; // <-- CHANGE THIS LINE TO SWITCH MODELS, then redeploy
 
 const MODEL = ACTIVE_MODEL;
 const MAX_OUTPUT_TOKENS = MODEL_CONFIGS[ACTIVE_MODEL].maxOutputTokens;
 
-const BATCH_SIZE = 12;
+const BATCH_SIZE = 12; // used for AI-generated mode
+const EXTRACT_BATCH_SIZE = 25; // extraction is copy-work, not creative work, so larger batches are safe and cut total round-trips
 const MAX_CONCURRENT = 1; // sequential, not parallel — avoids the Windows/Node libuv crash
 const MAX_SOURCE_CHARS = 120000;
 const MAX_TOPUP_ROUNDS = 6;
-const MAX_TOPUP_ROUNDS_EXTRACT = 2;
-const NUM_CHUNKS = 6;
+const MAX_TOPUP_ROUNDS_EXTRACT = 5; // raised — a genuinely full-content PDF deserves more retries to reach its true count
+const NUM_CHUNKS = 6; // used for AI-generated mode only
 
 const VERIFY_BATCH_SIZE = 20;
 const VERIFY_MAX_CONCURRENT = 1; // sequential, same reason
@@ -113,15 +114,26 @@ export default async function handler(req, res) {
       }
     }
 
+    // For extract mode: pre-compute how many non-overlapping slices the document needs,
+    // sized so each slice realistically contains ~EXTRACT_BATCH_SIZE worth of real questions.
+    const extractTotalChunks = sourceMode === 'extract'
+      ? Math.max(1, Math.ceil(targetCount / EXTRACT_BATCH_SIZE))
+      : NUM_CHUNKS;
+
     let batchCounter = 0;
     const seen = new Set();
     let deduped = [];
 
     function getChunk(batchIndex) {
-      const chunkSize = Math.ceil(sourceText.length / NUM_CHUNKS);
-      const chunkIdx = batchIndex % NUM_CHUNKS;
-      const start = Math.max(0, chunkIdx * chunkSize - 300);
-      return sourceText.slice(start, start + chunkSize + 600);
+      const totalChunks = sourceMode === 'extract' ? extractTotalChunks : NUM_CHUNKS;
+      const chunkSize = Math.ceil(sourceText.length / totalChunks);
+      const chunkIdx = batchIndex % totalChunks;
+      // small overlap only for AI mode (to preserve sentence continuity for creative writing);
+      // extract mode uses a clean, non-overlapping cut so no question text gets duplicated or skipped
+      const overlap = sourceMode === 'extract' ? 0 : 300;
+      const start = Math.max(0, chunkIdx * chunkSize - overlap);
+      const end = start + chunkSize + (sourceMode === 'extract' ? 0 : overlap * 2);
+      return sourceText.slice(start, end);
     }
 
     function recentQuestionSummaries(limit) {
@@ -132,13 +144,14 @@ export default async function handler(req, res) {
         .join(' | ') || 'none yet';
     }
 
-    function buildSizeList(n) {
+    function buildSizeList(n, batchSize) {
+      const size = batchSize || BATCH_SIZE;
       const sizes = [];
       let rem = n;
       while (rem > 0) {
-        const size = Math.min(BATCH_SIZE, rem);
-        sizes.push(size);
-        rem -= size;
+        const s = Math.min(size, rem);
+        sizes.push(s);
+        rem -= s;
       }
       return sizes;
     }
@@ -159,7 +172,7 @@ export default async function handler(req, res) {
         const chunk = sizes.slice(i, i + MAX_CONCURRENT);
         const chunkPromises = chunk.map((size) => {
           const batchIndex = batchCounter++;
-          const chunkText = usedExpansion ? sourceText : getChunk(batchIndex);
+          const chunkText = (sourceMode !== 'extract' && usedExpansion) ? sourceText : getChunk(batchIndex);
           const avoidList = recentQuestionSummaries();
           const prompt = sourceMode === 'extract'
             ? buildExtractPrompt(mode, size, chunkText, avoidList)
@@ -174,15 +187,24 @@ export default async function handler(req, res) {
       }
     }
 
-    const bufferedInitialCount = Math.min(150, Math.ceil(targetCount * 1.35));
-    await runBatches(buildSizeList(bufferedInitialCount));
+    if (sourceMode === 'extract') {
+      // One batch per non-overlapping chunk, sized to the actual chunk count — covers the whole
+      // document exactly once before any topup round even starts.
+      const perChunkCount = Math.ceil(targetCount / extractTotalChunks);
+      const sizes = new Array(extractTotalChunks).fill(perChunkCount);
+      await runBatches(sizes);
+    } else {
+      const bufferedInitialCount = Math.min(150, Math.ceil(targetCount * 1.35));
+      await runBatches(buildSizeList(bufferedInitialCount, BATCH_SIZE));
+    }
 
     const maxTopups = sourceMode === 'extract' ? MAX_TOPUP_ROUNDS_EXTRACT : MAX_TOPUP_ROUNDS;
+    const topupBatchSize = sourceMode === 'extract' ? EXTRACT_BATCH_SIZE : BATCH_SIZE;
     let topupRound = 0;
     while (deduped.length < targetCount && topupRound < maxTopups && timeLeft() > 6000) {
       const shortfall = targetCount - deduped.length;
       const before = deduped.length;
-      await runBatches(buildSizeList(shortfall));
+      await runBatches(buildSizeList(shortfall, topupBatchSize));
       if (deduped.length === before) break;
       topupRound++;
     }
@@ -270,23 +292,23 @@ function buildExtractPrompt(mode, count, sourceText, avoidList) {
   const mathInstruction = 'Write ALL math using LaTeX wrapped in single dollar signs (e.g. $x^2$, $\\infty$, $\\frac{a}{b}$), matching what appears in the source.';
 
   if (mode === 'flashcard') {
-    return 'The text below is an exam, worksheet, or study material that already contains its own questions and answers.\n\n' +
-      'Extract up to ' + count + ' existing question-and-answer pairs VERBATIM from this text — do not invent, paraphrase, or rephrase. Only fix obvious OCR/extraction typos.\n\n' +
+    return 'The text below is ONE SECTION of a larger exam/worksheet that already contains its own questions and answers. This section may contain up to ' + count + ' distinct questions — extract ALL of them that you find here, up to ' + count + '.\n\n' +
+      'Extract them VERBATIM — do not invent, paraphrase, or rephrase. Only fix obvious OCR/extraction typos (broken spacing, garbled characters). Do not skip any question just because it looks similar to another — near-identical numbering (e.g. "Question 12" vs "Question 13") does not mean duplicate content; extract each one that has distinct question text.\n\n' +
       mathInstruction + '\n\n' +
-      'Do not repeat any of these already-used items: ' + avoidList + '\n\n' +
+      'Do not repeat any of these already-used items from OTHER sections: ' + avoidList + '\n\n' +
       'If this excerpt has no extractable Q&A content, return an empty JSON array: []\n\n' +
       'Return a JSON array of objects: {"front": "exact original question/term", "back": "exact original answer/definition"}. Respond with ONLY the JSON array, no markdown, no commentary.\n\n' +
-      'SOURCE TEXT:\n"""' + sourceText + '"""';
+      'SOURCE TEXT (this section only):\n"""' + sourceText + '"""';
   }
 
-  return 'The text below is an exam, worksheet, or study material that already contains its own multiple-choice questions with answer choices.\n\n' +
-    'Extract up to ' + count + ' existing multiple-choice questions VERBATIM — copy the exact original wording. Do NOT invent new questions. Only fix obvious typos.\n\n' +
-    'For each: if a source answer key exists use it for "correctIndex"; otherwise use your own judgment. Write a brief "explanation".\n\n' +
+  return 'The text below is ONE SECTION of a larger exam/worksheet that already contains its own multiple-choice questions with answer choices. This section may contain up to ' + count + ' distinct questions — extract ALL of them that you find here, up to ' + count + '.\n\n' +
+    'Extract them VERBATIM — copy the exact original question wording and exact original choice wording. Do NOT invent new questions. Only fix obvious typos. Do not skip any question just because its number is close to another — extract every distinct question present in this section, even if there are many.\n\n' +
+    'For each: if a source answer key exists use it for "correctIndex"; otherwise use your own subject-matter judgment. Write a brief 1-2 sentence "explanation".\n\n' +
     mathInstruction + '\n\n' +
-    'Do not repeat any of these already-used questions: ' + avoidList + '\n\n' +
-    'If no extractable multiple-choice questions exist, return an empty JSON array: []\n\n' +
+    'Do not repeat any of these already-used questions from OTHER sections: ' + avoidList + '\n\n' +
+    'If no extractable multiple-choice questions exist in this section, return an empty JSON array: []\n\n' +
     'Return a JSON array of objects: {"question": "exact original question", "choices": [4 exact original choice strings], "correctIndex": 0-3, "explanation": "string"}. Respond with ONLY the JSON array, no markdown, no commentary.\n\n' +
-    'SOURCE TEXT:\n"""' + sourceText + '"""';
+    'SOURCE TEXT (this section only):\n"""' + sourceText + '"""';
 }
 
 function buildPrompt(mode, count, sourceText, batchIndex, avoidList, usedExpansion) {
