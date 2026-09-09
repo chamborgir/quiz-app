@@ -10,18 +10,20 @@ const MODEL = ACTIVE_MODEL;
 const MAX_OUTPUT_TOKENS = MODEL_CONFIGS[ACTIVE_MODEL].maxOutputTokens;
 
 const BATCH_SIZE = 12; // used for AI-generated mode
-const EXTRACT_BATCH_SIZE = 25; // extraction is copy-work, not creative work, so larger batches are safe and cut total round-trips
-const MAX_CONCURRENT = 1; // sequential, not parallel — avoids the Windows/Node libuv crash
-const MAX_SOURCE_CHARS = 120000;
+const EXTRACT_BATCH_SIZE = 15; // smaller batches = smaller prompts = faster individual responses, avoiding per-call timeouts
+const MAX_CONCURRENT = 1; // sequential — avoids the Windows/Node libuv crash
+const AI_MAX_SOURCE_CHARS = 120000;
+const EXTRACT_MAX_SOURCE_CHARS = 150000; // enough for a full 150-question exam without making each batch prompt too slow to respond within Vercel's timeout
 const MAX_TOPUP_ROUNDS = 6;
-const MAX_TOPUP_ROUNDS_EXTRACT = 5; // raised — a genuinely full-content PDF deserves more retries to reach its true count
+const MAX_TOPUP_ROUNDS_EXTRACT = 5;
 const NUM_CHUNKS = 6; // used for AI-generated mode only
 
 const VERIFY_BATCH_SIZE = 20;
-const VERIFY_MAX_CONCURRENT = 1; // sequential, same reason
+const VERIFY_MAX_CONCURRENT = 1;
 
-const SOFT_DEADLINE_MS = 56000;
+const SOFT_DEADLINE_MS = 55000; // just under Vercel Hobby's 60s hard limit
 const SHORT_SOURCE_THRESHOLD = 3000;
+const PER_CALL_TIMEOUT_MS = 25000; // no single Gemini call is allowed to run longer than this
 
 const SELF_REFERENTIAL_PATTERNS = [
   /\bproblem\s*#?\d+\b/i,
@@ -96,7 +98,9 @@ export default async function handler(req, res) {
       return;
     }
 
-    let sourceText = text.slice(0, MAX_SOURCE_CHARS);
+    const charLimit = sourceMode === 'extract' ? EXTRACT_MAX_SOURCE_CHARS : AI_MAX_SOURCE_CHARS;
+    let sourceText = text.slice(0, charLimit);
+    const wasTruncated = text.length > charLimit;
     const targetCount = Math.min(Number(count) || 0, 150);
     let usedExpansion = false;
 
@@ -104,7 +108,7 @@ export default async function handler(req, res) {
       try {
         const expanded = await callGeminiText(apiKey, buildExpansionPrompt(sourceText));
         if (expanded && expanded.trim().length > sourceText.length * 1.5) {
-          sourceText = expanded.trim().slice(0, MAX_SOURCE_CHARS);
+          sourceText = expanded.trim().slice(0, AI_MAX_SOURCE_CHARS);
           usedExpansion = true;
         } else {
           console.warn('Expansion result too short, keeping original source.');
@@ -114,8 +118,6 @@ export default async function handler(req, res) {
       }
     }
 
-    // For extract mode: pre-compute how many non-overlapping slices the document needs,
-    // sized so each slice realistically contains ~EXTRACT_BATCH_SIZE worth of real questions.
     const extractTotalChunks = sourceMode === 'extract'
       ? Math.max(1, Math.ceil(targetCount / EXTRACT_BATCH_SIZE))
       : NUM_CHUNKS;
@@ -128,8 +130,6 @@ export default async function handler(req, res) {
       const totalChunks = sourceMode === 'extract' ? extractTotalChunks : NUM_CHUNKS;
       const chunkSize = Math.ceil(sourceText.length / totalChunks);
       const chunkIdx = batchIndex % totalChunks;
-      // small overlap only for AI mode (to preserve sentence continuity for creative writing);
-      // extract mode uses a clean, non-overlapping cut so no question text gets duplicated or skipped
       const overlap = sourceMode === 'extract' ? 0 : 300;
       const start = Math.max(0, chunkIdx * chunkSize - overlap);
       const end = start + chunkSize + (sourceMode === 'extract' ? 0 : overlap * 2);
@@ -188,8 +188,6 @@ export default async function handler(req, res) {
     }
 
     if (sourceMode === 'extract') {
-      // One batch per non-overlapping chunk, sized to the actual chunk count — covers the whole
-      // document exactly once before any topup round even starts.
       const perChunkCount = Math.ceil(targetCount / extractTotalChunks);
       const sizes = new Array(extractTotalChunks).fill(perChunkCount);
       await runBatches(sizes);
@@ -228,6 +226,7 @@ export default async function handler(req, res) {
       questions: finalQuestions,
       generatedCount: finalQuestions.length,
       requestedCount: targetCount,
+      sourceTruncated: wasTruncated,
     });
   } catch (err) {
     console.error('Generation error:', err);
@@ -396,17 +395,31 @@ function safeParseJsonArray(rawText) {
 async function callGemini(apiKey, prompt) {
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent?key=' + apiKey;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        maxOutputTokens: MAX_OUTPUT_TOKENS,
-        responseMimeType: 'application/json',
-      },
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), PER_CALL_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: {
+          maxOutputTokens: MAX_OUTPUT_TOKENS,
+          responseMimeType: 'application/json',
+        },
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Gemini call timed out after ' + PER_CALL_TIMEOUT_MS + 'ms');
+    }
+    throw err;
+  }
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     const errText = await response.text();
@@ -424,14 +437,28 @@ async function callGemini(apiKey, prompt) {
 async function callGeminiText(apiKey, prompt) {
   const url = 'https://generativelanguage.googleapis.com/v1beta/models/' + MODEL + ':generateContent?key=' + apiKey;
 
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
-    }),
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), PER_CALL_TIMEOUT_MS);
+
+  let response;
+  try {
+    response = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { maxOutputTokens: MAX_OUTPUT_TOKENS },
+      }),
+      signal: controller.signal,
+    });
+  } catch (err) {
+    clearTimeout(timeoutId);
+    if (err.name === 'AbortError') {
+      throw new Error('Gemini call timed out after ' + PER_CALL_TIMEOUT_MS + 'ms');
+    }
+    throw err;
+  }
+  clearTimeout(timeoutId);
 
   if (!response.ok) {
     const errText = await response.text();
